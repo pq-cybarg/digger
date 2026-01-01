@@ -1,7 +1,7 @@
 # digger
 
 **Cross-platform endpoint forensics suite. Runs entirely on your machine.
-Codified ethics, post-quantum signed evidence, 28 detectors including a
+Codified ethics, post-quantum signed evidence, 30 detectors including a
 defensive mirror of every offensive-tooling kill-chain phase.**
 
 [![docs](https://img.shields.io/badge/docs-pq--cybarg.github.io%2Fdigger-2ea44f)](https://pq-cybarg.github.io/digger/)
@@ -30,7 +30,7 @@ defensive mirror of every offensive-tooling kill-chain phase.**
 
 `digger` walks into a host, pulls hundreds of forensic artifacts into an
 **append-only, dual-hash-chained, post-quantum-signable SQLite evidence
-store**, runs a stack of 28 detectors over them, and produces case
+store**, runs a stack of 30 detectors over them, and produces case
 reports suitable for legal disclosure, SOC handoff, or internal
 incident-response review. Every step is observation-only: it never
 modifies the system it's investigating without explicit, audited

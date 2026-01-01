@@ -36,6 +36,7 @@ def _common() -> list[Collector]:
     from digger.collectors.common.installed_software import InstalledSoftwareCollector
     from digger.collectors.common.python_packages import PythonPackagesCollector
     from digger.collectors.common.npm_packages import NpmPackagesCollector
+    from digger.collectors.common.cargo_packages import CargoPackagesCollector
     from digger.collectors.common.ssh_keys import SshKeysCollector
     from digger.collectors.common.github_workflows import GithubWorkflowsCollector
     from digger.collectors.common.service_versions import ServiceVersionsCollector
@@ -53,6 +54,7 @@ def _common() -> list[Collector]:
         InstalledSoftwareCollector(),
         PythonPackagesCollector(),
         NpmPackagesCollector(),
+        CargoPackagesCollector(),
         SshKeysCollector(),
         GithubWorkflowsCollector(),
         ServiceVersionsCollector(),

@@ -17,6 +17,7 @@ def all_detectors() -> list[Detector]:
     from digger.detectors.ssh_auth_keys import SshAuthKeysDetector
     from digger.detectors.shai_hulud import ShaiHuludDetector
     from digger.detectors.supply_chain import SupplyChainDetector
+    from digger.detectors.trapdoor import TrapDoorDetector
     from digger.detectors.c2 import C2Detector
     from digger.detectors.threat_actor import ThreatActorDetector
     from digger.detectors.service_cve import ServiceCVEDetector
@@ -47,6 +48,7 @@ def all_detectors() -> list[Detector]:
         SshAuthKeysDetector(),
         ShaiHuludDetector(),
         SupplyChainDetector(),
+        TrapDoorDetector(),
         C2Detector(),
         ThreatActorDetector(),
         ServiceCVEDetector(),

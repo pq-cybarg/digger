@@ -69,6 +69,7 @@ def _tags(finding: dict) -> list[str]:
         "c2":                   ["attack.command_and_control"],
         "shai_hulud":           ["attack.initial_access", "attack.supply_chain_compromise"],
         "supply_chain":         ["attack.initial_access", "attack.supply_chain_compromise"],
+        "trapdoor":             ["attack.initial_access", "attack.supply_chain_compromise"],
         "threat_actor":         ["attack.execution"],
         "env_hijack":           ["attack.privilege_escalation", "attack.defense_evasion"],
         "persistence_outlier": ["attack.persistence"],
@@ -172,6 +173,127 @@ def _gen_c2(finding: dict, *, case_id: str) -> Optional[dict]:
             "logsource": {"category": "proxy"},
             "detection": {
                 "selection": {"c-uri|contains": url[:120]},
+                "condition": "selection",
+            },
+        }
+    return None
+
+
+def _gen_trapdoor(finding: dict, *, case_id: str) -> Optional[dict]:
+    """Sigma rules for TrapDoor crypto-stealer campaign findings.
+
+    Routes by ``evidence.ecosystem``:
+      - npm / pypi / cargo    → file_event on the package manifest
+      - process / network     → process_creation on the marker / domain
+      - persistence           → file_event on the persistence file
+      - loader_file           → file_event on trap-core.js
+    """
+    ev = finding.get("evidence") or {}
+    ecosystem = ev.get("ecosystem") or ""
+    pkg = ev.get("package") or ""
+    if ecosystem == "npm" and pkg:
+        name = pkg.split("@", 1)[0]
+        return {
+            "title": f"TrapDoor compromised npm package: {pkg}",
+            "description": finding["summary"] +
+                            f"\n\nAuto-generated from digger finding {finding['finding_uuid']}.",
+            **_shared(finding, case_id=case_id, level="critical"),
+            "logsource": {"category": "file_event"},
+            "detection": {
+                "selection": {
+                    "TargetFilename|endswith": f"/node_modules/{name}/package.json",
+                },
+                "condition": "selection",
+            },
+        }
+    if ecosystem == "pypi" and pkg:
+        name = pkg.split("@", 1)[0]
+        return {
+            "title": f"TrapDoor compromised PyPI package: {pkg}",
+            "description": finding["summary"] +
+                            f"\n\nAuto-generated from digger finding {finding['finding_uuid']}.",
+            **_shared(finding, case_id=case_id, level="critical"),
+            "logsource": {"category": "file_event"},
+            "detection": {
+                "selection": {
+                    "TargetFilename|contains": [
+                        f"/site-packages/{name}/",
+                        f"/{name}-",  # dist-info dir prefix
+                    ],
+                },
+                "condition": "selection",
+            },
+        }
+    if ecosystem == "cargo" and pkg:
+        name = pkg.split("@", 1)[0]
+        return {
+            "title": f"TrapDoor compromised crates.io package: {pkg}",
+            "description": finding["summary"] +
+                            f"\n\nAuto-generated from digger finding {finding['finding_uuid']}.",
+            **_shared(finding, case_id=case_id, level="critical"),
+            "logsource": {"category": "file_event"},
+            "detection": {
+                "selection": {
+                    "TargetFilename|contains": f"/.cargo/registry/src/index.crates.io-",
+                    "TargetFilename|endswith": f"/{name}/build.rs",
+                },
+                "condition": "selection",
+            },
+        }
+    if ecosystem in ("process",) and ev.get("marker"):
+        return {
+            "title": f"TrapDoor marker in process cmdline: {ev.get('marker')}",
+            "description": finding["summary"] +
+                            f"\n\nAuto-generated from digger finding {finding['finding_uuid']}.",
+            **_shared(finding, case_id=case_id, level="critical"),
+            "logsource": {"category": "process_creation"},
+            "detection": {
+                "selection": {"CommandLine|contains": ev.get("marker")},
+                "condition": "selection",
+            },
+        }
+    if ecosystem == "network" and ev.get("domain"):
+        return {
+            "title": f"TrapDoor exfil domain: {ev.get('domain')}",
+            "description": finding["summary"] +
+                            f"\n\nAuto-generated from digger finding {finding['finding_uuid']}.",
+            **_shared(finding, case_id=case_id, level="high"),
+            "logsource": {"category": "dns"},
+            "detection": {
+                "selection": {
+                    "QueryName|contains": ev.get("domain").split("/", 1)[0],
+                },
+                "condition": "selection",
+            },
+        }
+    if ecosystem == "persistence" and ev.get("path"):
+        return {
+            "title": f"TrapDoor persistence file modified: {ev.get('path')}",
+            "description": finding["summary"] +
+                            f"\n\nAuto-generated from digger finding {finding['finding_uuid']}.",
+            **_shared(finding, case_id=case_id, level="critical"),
+            "logsource": {"category": "file_event"},
+            "detection": {
+                "selection": {
+                    "TargetFilename|endswith": ev.get("path"),
+                },
+                "filter_marker": {
+                    "Contents|contains": ev.get("marker") or "",
+                },
+                "condition": "selection AND filter_marker",
+            },
+        }
+    if ecosystem == "loader_file" and ev.get("path"):
+        return {
+            "title": f"TrapDoor loader file present: {ev.get('path')}",
+            "description": finding["summary"] +
+                            f"\n\nAuto-generated from digger finding {finding['finding_uuid']}.",
+            **_shared(finding, case_id=case_id, level="critical"),
+            "logsource": {"category": "file_event"},
+            "detection": {
+                "selection": {
+                    "TargetFilename|endswith": "/trap-core.js",
+                },
                 "condition": "selection",
             },
         }
@@ -858,6 +980,7 @@ _GENERATORS = {
     "suspicious_processes": _gen_suspicious_proc,
     "c2":                   _gen_c2,
     "shai_hulud":           _gen_shai_hulud,
+    "trapdoor":             _gen_trapdoor,
     "env_hijack":           _gen_env_hijack,
     "persistence_outlier": _gen_persistence_outlier,
     "threat_actor":         _gen_threat_actor,

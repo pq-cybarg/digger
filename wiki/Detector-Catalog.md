@@ -1,6 +1,6 @@
 # Detector catalog
 
-All 28 detectors registered in `digger/detectors/__init__.py:all_detectors()`.
+All 30 detectors registered in `digger/detectors/__init__.py:all_detectors()`.
 
 Severity ladders: `info` · `low` · `medium` · `high` · `critical`.
 
@@ -21,6 +21,7 @@ Severity ladders: `info` · `low` · `medium` · `high` · `critical`.
 | `unsigned_binary` | codesign / dpkg -V / rpm -V failures on running binaries | T1565.001 |
 | `shai_hulud` | npm worm package@version + workflow file + webhook exfil patterns | T1195.002 |
 | `supply_chain` | Malicious-package matches + live CISA KEV against installed software | T1195.001, T1190 |
+| `trapdoor` | TrapDoor crypto-stealer campaign (Socket Security 2026-05-24): 34 compromised packages across npm/PyPI/crates.io attributed to GitHub ddjidd564; per-ecosystem mitigation commands; campaign-marker scan (`P-2024-001`, `trap-core.js`, `ddjidd564.github.io`, `cargo-build-helper-2026`) across processes / recent files / persistence-file contents (`.cursorrules`, `CLAUDE.md`, shell rc, git hooks, systemd user units); DNS exfil-domain check. | T1195.001, T1059, T1546, T1041 |
 | `c2` | Cobalt Strike / Sliver / Mythic / Brute Ratel / Havoc / Empire / Meterpreter / Nighthawk / Merlin / Covenant + named-pipe + TLS-JA3 + injection landing pad | T1071, T1573, T1095, T1055 |
 | `threat_actor` | MITRE ATT&CK Enterprise groups (live STIX feed) + bundled supplemental | T1003, T1059 |
 | `service_cve` | Service-version → CVE (NVD CPE-keyed live feed) | T1190 |
