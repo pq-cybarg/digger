@@ -126,6 +126,14 @@ _HARDEN_NPM_IGNORE_SCRIPTS = """\
 # Block npm lifecycle scripts (preinstall / postinstall / install) from
 # executing automatically. The dropper for both Shai-Hulud variants is
 # a setup.mjs in the preinstall hook.
+#
+# CRITICAL: this command set ONLY hardens your local workstation. If
+# your repos run `npm install` / `npm ci` in GitHub Actions (or any
+# CI), the worm STILL fires there with full GITHUB_TOKEN access. You
+# MUST also apply the github_actions_ci_hardening block below, OR
+# disable the workflow entirely until both sides are fixed.
+# Local-only hardening = the worm pivots to CI = you get rekt by the remote execution.
+#
 # Reversible: npm config delete ignore-scripts
 npm config set ignore-scripts true --global
 npm config set unsafe-perm false --global
@@ -135,11 +143,120 @@ for proj in ~/code/* ~/projects/* ~/dev/* ~/src/*; do
     [ -f "$proj/package.json" ] || continue
     if ! grep -q '^ignore-scripts=true' "$proj/.npmrc" 2>/dev/null; then
         echo 'ignore-scripts=true' >> "$proj/.npmrc"
-        echo "hardened: $proj/.npmrc"
+        echo "hardened (local): $proj/.npmrc"
     fi
 done
+
+# COMMIT the .npmrc to the repo so CI honors it too (this is the
+# critical step — local .npmrc that isn't committed doesn't protect
+# CI runners):
+for proj in ~/code/* ~/projects/* ~/dev/* ~/src/*; do
+    [ -d "$proj/.git" ] || continue
+    [ -f "$proj/.npmrc" ] || continue
+    if grep -q '^ignore-scripts=true' "$proj/.npmrc"; then
+        (cd "$proj" && git add .npmrc && \\
+            git commit -m 'security: ignore-scripts=true (Shai-Hulud hardening)' .npmrc \\
+            2>/dev/null && echo "committed: $proj/.npmrc")
+    fi
+done
+
 # To run a trusted package's install hooks one-off after this:
 #   npm install --ignore-scripts=false --foreground-scripts <pkg>
+"""
+
+_HARDEN_CI_NPM = """\
+# GitHub Actions / CI-side npm hardening. WHY THIS MATTERS:
+# Local `ignore-scripts=true` only protects your workstation. A
+# GitHub Actions workflow doing `npm ci` or `npm install` will
+# execute every lifecycle script with the runner's full GITHUB_TOKEN
+# (write access by default — see github_token_hardening). Both
+# Shai-Hulud variants assume CI will run them.
+#
+# This hardens the CI side. Apply ALL four steps for every repo:
+
+# 1. Add .npmrc with ignore-scripts=true to the repo root (covers
+#    every workflow that doesn't override it):
+for proj in ~/code/* ~/projects/* ~/dev/* ~/src/*; do
+    [ -d "$proj/.git" ] || continue
+    [ -f "$proj/package.json" ] || continue
+    if ! grep -q '^ignore-scripts=true' "$proj/.npmrc" 2>/dev/null; then
+        echo 'ignore-scripts=true' >> "$proj/.npmrc"
+    fi
+    if ! grep -q '^audit=true' "$proj/.npmrc" 2>/dev/null; then
+        echo 'audit=true' >> "$proj/.npmrc"
+    fi
+done
+
+# 2. Audit every workflow file for unsafe npm/yarn/pnpm commands.
+#    Anything that runs `npm install`, `npm ci`, `yarn install`,
+#    `pnpm install`, or `pnpm i` WITHOUT explicit --ignore-scripts
+#    (or NPM_CONFIG_IGNORE_SCRIPTS=true env) is vulnerable:
+echo "=== Workflows with unsafe install commands ==="
+for wf in ~/code/*/.github/workflows/*.y*ml \\
+          ~/projects/*/.github/workflows/*.y*ml \\
+          ~/dev/*/.github/workflows/*.y*ml; do
+    [ -f "$wf" ] || continue
+    if grep -E '^\\s*(npm|yarn|pnpm) (ci|install|i)\\b' "$wf" \\
+        | grep -v 'ignore-scripts' >/dev/null 2>&1; then
+        echo "VULNERABLE: $wf"
+        grep -nE '^\\s*(npm|yarn|pnpm) (ci|install|i)\\b' "$wf"
+    fi
+done
+
+# 3. Recommended workflow snippet to drop into every install step.
+#    The env-var form survives even if a subdependency overrides the
+#    project's .npmrc:
+cat <<'YAML'
+# Add to every job that installs npm/yarn/pnpm dependencies:
+    env:
+      NPM_CONFIG_IGNORE_SCRIPTS: "true"
+      YARN_ENABLE_SCRIPTS: "false"
+    steps:
+      - uses: actions/checkout@<full-40-char-SHA>   # NEVER @v4 / @main
+      - run: npm ci --ignore-scripts                # explicit safe install
+      # if the project NEEDS a lifecycle script for one package, run
+      # it explicitly and ONLY for that package, after install:
+      # - run: npm rebuild --foreground-scripts <one-trusted-pkg>
+YAML
+
+# 4. Pin every action to a full 40-character SHA, not a tag. Tags
+#    can be retargeted by the action's owner; SHAs cannot. List
+#    unpinned actions in your workflows:
+echo "=== Unpinned actions (tag-based, will-not-tofu) ==="
+for wf in ~/code/*/.github/workflows/*.y*ml \\
+          ~/projects/*/.github/workflows/*.y*ml \\
+          ~/dev/*/.github/workflows/*.y*ml; do
+    [ -f "$wf" ] || continue
+    grep -nE 'uses:\\s*\\S+@(v[0-9]+(\\.[0-9]+)*|main|master|latest|HEAD)\\b' "$wf"
+done
+
+# 5. (Manual) Enable in each repo's GitHub Settings → Actions:
+#    - "Require approval for first-time contributors"
+#    - "Require approval for all outside collaborators"
+#    - Environment protection rules on any env exposing secrets
+#    - Restrict who can modify workflow files
+#
+# 6. (Manual) Set up a CODEOWNERS rule for /.github/workflows/ so
+#    workflow modifications need explicit review:
+for proj in ~/code/* ~/projects/* ~/dev/* ~/src/*; do
+    [ -d "$proj/.git" ] || continue
+    mkdir -p "$proj/.github"
+    if ! grep -q '/.github/workflows/' "$proj/.github/CODEOWNERS" 2>/dev/null; then
+        echo "/.github/workflows/ @$(git -C "$proj" config user.name | tr -d ' ')" \\
+            >> "$proj/.github/CODEOWNERS"
+        echo "added CODEOWNERS rule: $proj"
+    fi
+done
+
+# 7. Block workflow_run triggers from forked PRs (they reuse the
+#    base-branch GITHUB_TOKEN with WRITE scope — extremely dangerous).
+#    Audit:
+for wf in ~/code/*/.github/workflows/*.y*ml; do
+    [ -f "$wf" ] || continue
+    if grep -q 'workflow_run\\|pull_request_target' "$wf"; then
+        echo "AUDIT (privileged trigger): $wf"
+    fi
+done
 """
 
 _HARDEN_IDE_DIRS_IMMUTABLE = """\
@@ -308,6 +425,7 @@ def _redact_block(block: str) -> str:
 _HARDEN_BLOCKS = {
     "disarm_first":           _redact_block(_HARDEN_DISARM_FIRST),
     "npm_ignore_scripts":     _redact_block(_HARDEN_NPM_IGNORE_SCRIPTS),
+    "ci_npm":                 _redact_block(_HARDEN_CI_NPM),
     "ide_dirs_immutable":     _redact_block(_HARDEN_IDE_DIRS_IMMUTABLE),
     "persistence_dirs_locked": _redact_block(_HARDEN_PERSISTENCE_DIRS_LOCKED),
     "hosts_block":            _redact_block(_HARDEN_HOSTS_BLOCK),
@@ -433,7 +551,8 @@ class ShaiHuludBlockerDetector(Detector):
                 severity="info",
                 title=(
                     "npm install-scripts are the Shai-Hulud entry "
-                    "point — hardening commands available"
+                    "point — LOCAL hardening commands available "
+                    "(see also CI hardening — both required)"
                 ),
                 summary=(
                     "npm projects were observed on this host. Both "
@@ -441,16 +560,65 @@ class ShaiHuludBlockerDetector(Detector):
                     "lifecycle script in a malicious dependency. "
                     "Globally disabling lifecycle-script execution "
                     "(``npm config set ignore-scripts true``) neuters "
-                    "this entry point. The hardening_commands block "
-                    "applies it globally and to every detected "
-                    "project's .npmrc. Reversible per-package via "
-                    "``--ignore-scripts=false --foreground-scripts``."
+                    "this entry point on your WORKSTATION.\n\n"
+                    "CRITICAL: this finding only covers local. If "
+                    "your repos run ``npm install`` / ``npm ci`` in "
+                    "GitHub Actions, the worm STILL fires there with "
+                    "full GITHUB_TOKEN access. The separate "
+                    "``github_actions_ci_hardening`` finding has the "
+                    "CI-side hardening commands. Apply both, or "
+                    "expect the worm to pivot to CI."
                 ),
                 artifact_refs=[],
                 evidence={
                     "kind": "npm_lifecycle_scripts_hardening",
-                    "primitive": "npm preinstall/postinstall",
+                    "primitive": "npm preinstall/postinstall (local)",
                     "hardening_commands": _HARDEN_BLOCKS["npm_ignore_scripts"],
+                    "see_also": "github_actions_ci_hardening",
+                    "reversible": True,
+                },
+                mitre="T1195.002",
+            )
+
+            # H2b — always paired with H2: CI-side npm hardening
+            yield Finding(
+                detector=self.name,
+                severity="info",
+                title=(
+                    "GitHub Actions npm install runs unprotected — "
+                    "CI-side hardening commands available (PAIRED "
+                    "with local npm hardening — both required)"
+                ),
+                summary=(
+                    "Local ignore-scripts=true does NOT protect "
+                    "GitHub Actions workflows that run ``npm "
+                    "install`` / ``npm ci`` — those execute every "
+                    "lifecycle script with the runner's GITHUB_TOKEN, "
+                    "which defaults to write access to the repo. The "
+                    "Shai-Hulud worm explicitly assumes CI will run "
+                    "it.\n\nThe hardening_commands block does 7 "
+                    "things: (1) commits ``.npmrc`` with "
+                    "ignore-scripts=true to every repo, (2) audits "
+                    "every workflow for unsafe install commands, "
+                    "(3) provides a safe workflow snippet using "
+                    "``NPM_CONFIG_IGNORE_SCRIPTS: 'true'`` env-var, "
+                    "(4) lists unpinned actions (anything not pinned "
+                    "to a full 40-char SHA can be retargeted), (5) "
+                    "documents the GitHub UI settings to enable, (6) "
+                    "adds a CODEOWNERS rule for /.github/workflows/ "
+                    "so workflow modifications need review, (7) "
+                    "audits for ``workflow_run`` / "
+                    "``pull_request_target`` triggers which give "
+                    "forked-PR code write-scope GITHUB_TOKEN.\n\n"
+                    "Apply BOTH this AND the local hardening, or "
+                    "the worm just pivots to CI execution."
+                ),
+                artifact_refs=[],
+                evidence={
+                    "kind": "github_actions_ci_hardening",
+                    "primitive": "npm install / npm ci in GitHub Actions",
+                    "hardening_commands": _HARDEN_BLOCKS["ci_npm"],
+                    "see_also": "npm_lifecycle_scripts_hardening",
                     "reversible": True,
                 },
                 mitre="T1195.002",

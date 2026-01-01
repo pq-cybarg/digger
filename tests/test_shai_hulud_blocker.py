@@ -77,6 +77,62 @@ def test_npm_project_present_emits_lifecycle_hardening(tmp_path):
     store.close()
 
 
+def test_npm_local_finding_warns_about_remote_execution(tmp_path):
+    """The local-hardening finding must explicitly warn that ignoring
+    scripts locally does NOT protect CI runners. If a user follows
+    only the local advice, they get rekt by GitHub Actions."""
+    store = _store(tmp_path)
+    store.add_artifact(Artifact(
+        collector="npm_packages", category="inventory",
+        subject="npm:/proj/x",
+        data={"project": "/proj/x", "locked_packages": {"react": "18.0.0"}},
+    ))
+    f = next(f for f in ShaiHuludBlockerDetector().detect(store)
+             if f.evidence.get("kind") == "npm_lifecycle_scripts_hardening")
+    summary = f.summary or ""
+    assert "CRITICAL" in summary
+    assert "GitHub Actions" in summary
+    assert "GITHUB_TOKEN" in summary
+    # Cross-reference to the CI-side finding
+    assert f.evidence.get("see_also") == "github_actions_ci_hardening"
+    # The hardening block itself also carries the warning
+    mit = f.evidence.get("hardening_commands") or ""
+    assert "get rekt by the remote execution" in mit
+    store.close()
+
+
+def test_npm_project_also_emits_ci_hardening(tmp_path):
+    """H2 (local) and H2b (CI) must always be paired — applying only
+    one leaves the other vector open."""
+    store = _store(tmp_path)
+    store.add_artifact(Artifact(
+        collector="npm_packages", category="inventory",
+        subject="npm:/proj/x",
+        data={"project": "/proj/x", "locked_packages": {"react": "18.0.0"}},
+    ))
+    findings = list(ShaiHuludBlockerDetector().detect(store))
+    kinds = {f.evidence.get("kind") for f in findings}
+    assert "npm_lifecycle_scripts_hardening" in kinds
+    assert "github_actions_ci_hardening" in kinds
+    # CI hardening must be substantive
+    ci = next(f for f in findings
+              if f.evidence.get("kind") == "github_actions_ci_hardening")
+    mit = ci.evidence.get("hardening_commands") or ""
+    # Each of the 7 steps must be present
+    assert "ignore-scripts=true" in mit
+    assert "VULNERABLE" in mit  # workflow audit step
+    assert "NPM_CONFIG_IGNORE_SCRIPTS" in mit  # env-var snippet
+    assert "full-40-char-SHA" in mit  # SHA pinning
+    assert "actions/checkout@" in mit
+    assert "Unpinned actions" in mit
+    assert "CODEOWNERS" in mit
+    assert "workflow_run" in mit  # privileged-trigger audit
+    assert "pull_request_target" in mit
+    # Cross-reference back
+    assert ci.evidence.get("see_also") == "npm_lifecycle_scripts_hardening"
+    store.close()
+
+
 def test_no_npm_project_no_lifecycle_finding(tmp_path):
     """Without any npm artifact, the lifecycle hardening doesn't fire
     (no value in suggesting a global setting for a host with no npm)."""
