@@ -746,6 +746,34 @@ def cmd_k8s_collect(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_git_audit_hooks(args: argparse.Namespace) -> int:
+    from digger.git_audit import audit_git_repos, emit_records_to_store
+    store = EvidenceStore(args.case_dir)
+    try:
+        roots = ([r.strip() for r in args.roots.split(",") if r.strip()]
+                  if args.roots else None)
+        records = audit_git_repos(roots=roots)
+        emitted = emit_records_to_store(records, store)
+        pts = sum(1 for r in records if r.contains_pipe_to_shell)
+        net = sum(1 for r in records if r.contains_network_fetch)
+        evl = sum(1 for r in records if r.contains_eval_input)
+        smf = sum(1 for r in records if r.contains_self_modify)
+        b64 = sum(1 for r in records
+                  if r.contains_long_base64 or r.contains_long_hex)
+        silent = sum(1 for r in records if r.is_silent_operation_hook)
+        print(f"[git] executable hooks audited: {len(records)}")
+        print(f"[git]   pipe-to-shell:    {pts}")
+        print(f"[git]   network-fetch:    {net}")
+        print(f"[git]   eval input:       {evl}")
+        print(f"[git]   self-modifying:   {smf}")
+        print(f"[git]   encoded payload:  {b64}")
+        print(f"[git]   silent-op hooks:  {silent}")
+        print(f"[git] artifacts emitted: {emitted}")
+    finally:
+        store.close()
+    return 0
+
+
 def cmd_ci_workflow_audit(args: argparse.Namespace) -> int:
     from digger.ci import audit_workflows, emit_records_to_store
     store = EvidenceStore(args.case_dir)
@@ -1842,6 +1870,29 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Comma-separated repo / workflow-dir / "
                           "single-file paths (default: cwd)")
     pca.set_defaults(func=cmd_ci_workflow_audit)
+
+    pg = sub.add_parser(
+        "git",
+        help="Git repo auditor — walks .git/hooks/ for every repo "
+             "under the supplied roots and flags suspicious hooks "
+             "(pipe-to-shell, network-fetch in silent-operation "
+             "hooks, eval of attacker-controlled input, self-"
+             "modifying hooks, encoded payloads).",
+    )
+    g_sub = pg.add_subparsers(dest="git_cmd", required=True)
+
+    pga = g_sub.add_parser(
+        "audit-hooks",
+        help="Walk .git/hooks under the supplied roots (default: "
+             "cwd), parse each executable hook, emit one Artifact "
+             "per hook. GitHookAuditDetector runs on them at "
+             "digger scan time.",
+    )
+    _add_case_arg(pga)
+    pga.add_argument("--roots",
+                     help="Comma-separated repo / parent-dir paths "
+                          "(default: cwd)")
+    pga.set_defaults(func=cmd_git_audit_hooks)
 
     pp = sub.add_parser(
         "plaso",
