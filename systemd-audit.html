@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Linux systemd unit deep audit — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="systemd-audit">
+<main>
+
+<h1>Linux systemd unit deep audit
+  <span class="subtitle">User and system unit text inspected against U1-U7 — the Linux parallel to <a href="macos-launchd.html">macos_launchd</a>.</span>
+</h1>
+
+<p>The existing <code>persistent_sessions</code> detector catches
+one narrow systemd shape (ExecStart pointing at a user-writable
+shell script). <code>SystemdAuditDetector</code> covers the rest of
+the malicious-unit patterns documented across Linux malware
+research (Symbiote, OrBit, BPFDoor, Earth Lusca's CrossLock
+loader).</p>
+
+<h2>Scope</h2>
+
+<p>Consumes Artifacts emitted by the existing
+<code>linux.systemd</code> collector:</p>
+<ul class="kv">
+  <li><code>user-unit:*</code> — per-user units under
+    <code>~/.config/systemd/user/</code></li>
+  <li><code>system-unit:*</code> — operator-customized + runtime-
+    generated units under <code>/etc/systemd/system</code> and
+    <code>/run/systemd/system</code></li>
+</ul>
+
+<p>The vendor-shipped <code>/usr/lib/systemd/system</code> tree is
+intentionally out of scope (signed-package files; would generate
+massive noise on fresh distro installs). Symlinks under
+<code>/etc/systemd/system</code> typically alias into the vendor
+tree and are skipped at collection time — the <code>unit-dir:</code>
+listing artifact already records them by name + symlink_target.</p>
+
+<h2>Detection layers (U1–U7)</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>What it catches</th><th>MITRE</th></tr></thead>
+  <tbody>
+    <tr><td>U1</td><td>high &rarr; critical</td><td>Network-fetch in any Exec* line. curl/wget/nc/socat/python-socket. Critical when piped to shell.</td><td>T1543.002</td></tr>
+    <tr><td>U2</td><td>medium</td><td>Long base64 or escaped-hex sequence in Exec lines.</td><td>T1027</td></tr>
+    <tr><td>U3</td><td>high</td><td>Interpreter (sh/bash/python/perl/ruby/node) + <code>Restart=always/on-failure/on-abnormal/on-success</code> = respawn loop. Honors the systemd <code>+/-/@/!</code> Exec-line modifiers.</td><td>T1059.004</td></tr>
+    <tr><td>U4</td><td>high</td><td>ExecStart in /tmp / /home / /root / .cache / .config AND <code>[Install]</code> section auto-enables it (WantedBy/RequiredBy). Boots auto-start running code with write-access surface.</td><td>T1546</td></tr>
+    <tr><td>U5</td><td>critical</td><td><code>User=root</code> + writable Exec target. Canonical Linux setuid-via-systemd primitive — write access &rarr; root every fire.</td><td>T1543.002</td></tr>
+    <tr><td>U6</td><td>medium</td><td>Writable <code>EnvironmentFile</code> or <code>LoadCredentialEncrypted</code> path. Inject LD_PRELOAD / substitute credentials before service start.</td><td>T1546</td></tr>
+    <tr><td>U7</td><td>medium</td><td>Suspicious timer cadence — <code>OnUnitActiveSec</code> &lt; 60s. Legitimate timers rarely fire sub-minute; fast-cadence is the canonical C2 / beacon poll shape.</td><td>T1053.006</td></tr>
+  </tbody>
+</table>
+
+<h2>No new CLI needed</h2>
+
+<p>The systemd collector already runs as part of
+<code>digger collect</code>; the detector runs at
+<code>digger scan</code> time.</p>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>
