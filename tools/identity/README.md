@@ -48,27 +48,27 @@ then run `ghid doctor` to sanity-check your `~/.ssh/config`.
 ```bash
 # 1. Add an identity (creates an SSH key + alias in ~/.ssh/config).
 #    Reuses an existing ~/.ssh/<name>-GitHub key if present.
-ghid new pq-cybarg
+ghid new myalias
 
 # 2. In a repo, bind it to that identity and lock so any push under a
 #    different identity is refused:
 cd ~/some/repo
-ghid switch pq-cybarg
-ghid lock pq-cybarg
+ghid switch myalias
+ghid lock myalias
 
 # 3. Confirm GitHub actually resolves the key to the expected user:
-ghid verify pq-cybarg
-# → ✓ alias github-pq-cybarg resolves to GitHub user pq-cybarg
+ghid verify myalias
+# → ✓ alias github-myalias resolves to GitHub user myalias
 ```
 
-In the menu bar, ghidbar shows `🔑 pq-cybarg 🔒` while you're in the repo
+In the menu bar, ghidbar shows `🔑 myalias 🔒` while you're in the repo
 (its watched repo is set via the `ghidbar-here` / `gbh` shell function
 added to `~/.zshrc` by the install).
 
 ## Key rotation
 
 ```bash
-ghid rotate pq-cybarg
+ghid rotate myalias
 # → Archives old key to ~/.ssh/.ghid-archive/, generates fresh one,
 #   prints both new pubkey and old fingerprint so you know what to
 #   add and what to delete on github.com/settings/keys.

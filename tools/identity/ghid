@@ -28,7 +28,7 @@
 # identity hosts where every block uses `Host github.com` will silently
 # auth EVERY operation as whichever identity comes first in the file.
 # ghid forces explicit identity-aliased URLs (e.g.
-# git@github-pqcybarg:owner/repo.git) and provides the safety nets so
+# git@github-myalias:owner/repo.git) and provides the safety nets so
 # the wrong identity can't slip through.
 
 set -euo pipefail
@@ -64,7 +64,7 @@ _update_ghidbar_state() {
 }
 
 # Parse ~/.ssh/config and emit one line per `Host github-*` alias:
-#   github-pqcybarg|/Users/me/.ssh/pq-cybarg-GitHub
+#   github-myalias|/Users/me/.ssh/myalias-GitHub
 list_aliases() {
     [[ -f "$SSH_CONFIG" ]] || return 0
     awk -v pfx="$IDENTITY_PREFIX" '
@@ -109,9 +109,9 @@ resolve_alias() {
 }
 
 # Resolve owner from a git URL like:
-#   git@github-pqcybarg:pq-cybarg/digger.git    -> pqcybarg
-#   git@github.com:pq-cybarg/digger.git         -> (unsafe; warn)
-#   https://github.com/pq-cybarg/digger.git     -> (https; warn)
+#   git@github-myalias:myalias/digger.git    -> myalias
+#   git@github.com:myalias/digger.git         -> (unsafe; warn)
+#   https://github.com/myalias/digger.git     -> (https; warn)
 identity_from_remote_url() {
     local url="$1"
     case "$url" in

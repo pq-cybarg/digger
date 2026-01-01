@@ -2,7 +2,7 @@
 """ghidbar — macOS menu-bar UI for the `ghid` GitHub identity manager.
 
 Sits in the menu bar. Shows the GitHub identity bound to the selected
-repo's origin in the title (🔑 pq-cybarg ✓). Click to switch identities,
+repo's origin in the title (🔑 myalias ✓). Click to switch identities,
 lock the repo, verify, or change the watched repo. All logic shells out
 to the `ghid` CLI so the two stay in lockstep.
 
