@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ethical contract — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="ethics">
+<main>
+
+<h1>Ethical contract
+  <span class="subtitle">Ten principles, programmatically enforced. Not advisory.</span>
+</h1>
+
+<p>digger ships with a codified ethical contract — <code>digger.ethics.contract</code>
+exposes ten <code>Principle</code> records and a set of assertion helpers
+that raise <code>EthicsViolation</code> when violated. These are not
+docstrings. State-modifying features call the assertions on the way in;
+the test suite has <strong>19 load-bearing tests</strong> in
+<code>tests/test_ethics.py</code> that fail if a principle's enforcement is
+removed.</p>
+
+<p>The contract intentionally mirrors and inverts every offensive
+capability digger detects against. See <a href="decepticon-counter.html">Decepticon
+countermeasures</a> for the contrast table that drove the principle list.</p>
+
+<h2>The ten principles</h2>
+
+<ul class="kv">
+  <li><b>P1 — Local host only.</b> digger inspects only the host it
+    runs on. <code>assert_target_is_localhost(addr, feature)</code>
+    raises on any non-loopback / non-localhost address.</li>
+  <li><b>P2 — Observation by default.</b> digger reads; it does not
+    modify state. Remediation flows are opt-in, route through
+    <code>confirm_remediation_intent(cmd, interactive=True)</code>, and
+    refuse non-interactive sessions.</li>
+  <li><b>P3 — No exploitation.</b> digger never sends a payload to
+    verify a vulnerability. <code>assert_not_exploitation</code> blocks
+    phrases like "msfconsole", "msfvenom", "sqlmap against", "exploit/...".</li>
+  <li><b>P4 — No credential attacks.</b> No brute force, no rainbow
+    tables, no offline cracking. <code>assert_not_credential_attack</code>
+    blocks "john the ripper", "hashcat", brute force, rainbow table.</li>
+  <li><b>P5 — No third-party surveillance.</b> Out-of-scope user
+    accounts are off-limits unless explicit consent is recorded.
+    <code>assert_no_third_party_surveillance(scope)</code>.</li>
+  <li><b>P6 — No egress without opt-in.</b> Network calls (intel-feed
+    fetch, LLM triage, TAXII push) require explicit consent; air-gap
+    mode (<code>DIGGER_AIRGAP=1</code>) refuses all egress.</li>
+  <li><b>P7 — Calibrated findings.</b> Severity reflects evidence
+    strength. The triage runner enforces ICD 203 estimative probability
+    + analytic confidence per finding.</li>
+  <li><b>P8 — No biometric collection.</b> No camera / mic / fingerprint
+    / face capture; no behavioral biometric profiling.</li>
+  <li><b>P9 — Refuse compromised configuration.</b> When pre-flight
+    detects that digger itself has been tampered with (signed-binary
+    mismatch, missing PQC keys, unexpected mode bits), it aborts.</li>
+  <li><b>P10 — Audit-visible.</b> digger never silently filters its own
+    findings. When a check fires on digger itself, the finding is
+    emitted with a clear self-attribution note via
+    <code>digger.opsec.self_id.identify</code>.</li>
+</ul>
+
+<h2>Engagement scope (pre-engagement attestation)</h2>
+
+<p>Before the first artifact is touched, an <code>EngagementScope</code> is
+recorded into the chain of custody. The scope answers four questions in
+writing:</p>
+
+<table>
+  <thead><tr><th>Field group</th><th>Captured</th></tr></thead>
+  <tbody>
+    <tr><td><b>WHO</b></td><td>investigator name, role, contact, organization</td></tr>
+    <tr><td><b>WHY</b></td><td>legal authority + written consent reference (ticket / contract clause / email msg-id)</td></tr>
+    <tr><td><b>WHAT</b></td><td>target hosts + data categories opted in + <code>cross_host_allowed</code> flag</td></tr>
+    <tr><td><b>WHEN</b></td><td>window start, expected end, retention days, deconfliction notes</td></tr>
+  </tbody>
+</table>
+
+<p><code>EngagementScope.validate()</code> raises <code>EthicsViolation</code> for
+obvious gaps: empty investigator name, multi-host scope without
+<code>cross_host_allowed=True</code>, unrecognized data categories,
+retention &gt; 10 years.</p>
+
+<h2>Remediation gating</h2>
+
+<p>Every remediation command emitted by a detector (e.g., the firewall
+auditor's "run this to add default-deny inbound") routes through
+<code>redact_dangerous_command(cmd)</code> first. The function recognizes
+destructive operations — <code>rm -rf</code>, <code>dd of=</code>,
+<code>chmod 777</code>, <code>iptables -F</code> with no preservation,
+<code>pfctl -d</code>, etc. — and annotates them as destructive in the
+output.</p>
+
+<p>digger <strong>never</strong> applies remediation itself. The
+<code>firewall audit</code> CLI prints commands with a <code>[DESTRUCTIVE]</code>
+marker on the flagged ones; the operator runs them by hand.</p>
+
+<h2>Where the contract is wired in</h2>
+
+<ul class="kv">
+  <li><code>digger/opsec/airgap.py</code>: <code>assert_network_allowed</code>
+    gates every outbound HTTP call (intel feeds, LLM triage, TAXII).</li>
+  <li><code>digger/intel/sources/*</code>: every composite feed calls
+    <code>assert_network_allowed</code> at the top of <code>fetch_fn</code>.</li>
+  <li><code>digger/firewall/audit.py</code>: every <code>Remedy.annotated()</code>
+    routes commands through <code>redact_dangerous_command</code>.</li>
+  <li><code>digger/coc/</code> (chain of custody): <code>record_scope</code>
+    appends the engagement scope to <code>chain_of_custody.json</code> and
+    re-validates on load to catch tampering.</li>
+</ul>
+
+<h2>Why it's load-bearing</h2>
+
+<p>The 19 tests in <code>tests/test_ethics.py</code> include:</p>
+
+<ul>
+  <li><code>test_canonical_principles_present</code> — fails if any
+    principle is deleted from the registry.</li>
+  <li><code>test_remote_address_refused</code> — fails if P1 stops
+    refusing non-localhost.</li>
+  <li><code>test_exploitation_intent_refused</code> — fails if P3 stops
+    refusing exploit phrasing.</li>
+  <li><code>test_credential_cracking_refused</code> — fails if P4 stops
+    refusing brute-force phrasing.</li>
+  <li><code>test_destructive_commands_redacted</code> — fails if the
+    redactor stops annotating destructive commands.</li>
+  <li><code>test_remote_target_in_scope_refused_without_flag</code> — fails
+    if a scope can quietly include other hosts.</li>
+  <li><code>test_scope_roundtrips_through_disk</code> — fails if the
+    chain-of-custody serialization drops scope fields.</li>
+</ul>
+
+<p>A pull request that removes any guardrail breaks the suite, with a
+test name pointing at the principle.</p>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>

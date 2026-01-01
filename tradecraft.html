@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Analytic tradecraft — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="tradecraft">
+<main>
+
+<h1>Analytic tradecraft
+  <span class="subtitle">ICD 203, NATO Admiralty, TLP, and Heuer's Analysis of Competing Hypotheses — wired into the AI triage schema and the case report.</span>
+</h1>
+
+<h2>Why this matters</h2>
+
+<p>An LLM left unconstrained will produce confidently-worded analysis with no
+calibrated uncertainty, no separation of source from inference, and no
+explicit assumptions. The IC analytic standards exist exactly to defend
+against those failure modes. digger pins them into the triage prompt and
+the output schema, and the report renderer surfaces them.</p>
+
+<h2>ICD 203 — estimative probability</h2>
+
+<p>The seven-step IC ladder maps natural-language probability claims to
+numeric ranges. From ODNI Tradecraft Primer / Sherman Kent's work:</p>
+
+<table>
+<thead><tr><th>Phrase</th><th>Range</th></tr></thead>
+<tbody>
+<tr><td>almost no chance</td><td>0.01 – 0.05</td></tr>
+<tr><td>very unlikely</td><td>0.05 – 0.20</td></tr>
+<tr><td>unlikely</td><td>0.20 – 0.45</td></tr>
+<tr><td>roughly even chance</td><td>0.45 – 0.55</td></tr>
+<tr><td>likely</td><td>0.55 – 0.80</td></tr>
+<tr><td>very likely</td><td>0.80 – 0.95</td></tr>
+<tr><td>almost certain</td><td>0.95 – 0.99</td></tr>
+</tbody>
+</table>
+
+<p>The triage schema requires <code>estimative_probability</code> to be one
+of these seven exact strings. Intermediate phrases ("probably", "maybe",
+"highly likely") are not permitted — they invite false precision.</p>
+
+<p>Separately, <code>analytic_confidence</code> grades the analyst's
+confidence in the judgment itself, on a three-step ladder:
+<code>low</code> · <code>moderate</code> · <code>high</code>. Probability
+and confidence are independent dimensions.</p>
+
+<pre><code># In code
+from digger.tradecraft import (
+    ESTIMATIVE_PROBABILITY, ESTIMATIVE_RANGES, validate_judgment,
+)
+from digger.tradecraft.icd203 import label_for_probability
+
+label_for_probability(0.7)                 # → "likely"
+validate_judgment("probably")              # → False
+ESTIMATIVE_RANGES["very likely"]           # → (0.80, 0.95)</code></pre>
+
+<h2>NATO Admiralty — source &amp; information reliability</h2>
+
+<p>STANAG 2511. A two-dimensional rating used across NATO, Five Eyes, and
+most Western intelligence services. <em>Source reliability</em> grades the
+source; <em>information credibility</em> grades the piece of information.</p>
+
+<h3>Source reliability</h3>
+<table>
+<thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>A</td><td>Completely reliable — history of complete reliability</td></tr>
+<tr><td>B</td><td>Usually reliable</td></tr>
+<tr><td>C</td><td>Fairly reliable</td></tr>
+<tr><td>D</td><td>Not usually reliable</td></tr>
+<tr><td>E</td><td>Unreliable</td></tr>
+<tr><td>F</td><td>Reliability cannot be judged</td></tr>
+</tbody>
+</table>
+
+<h3>Information credibility</h3>
+<table>
+<thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Confirmed by other sources</td></tr>
+<tr><td>2</td><td>Probably true — consistent with other information</td></tr>
+<tr><td>3</td><td>Possibly true — reasonably consistent</td></tr>
+<tr><td>4</td><td>Doubtful — not consistent</td></tr>
+<tr><td>5</td><td>Improbable — contradicted</td></tr>
+<tr><td>6</td><td>Truth cannot be judged</td></tr>
+</tbody>
+</table>
+
+<p>For digger findings, the source is one or more collectors. First-party
+deterministic collectors (processes, network, system, registry, launchd,
+systemd) default to source-reliability <strong>A</strong>. The information
+credibility depends on whether the artifact corroborates other artifacts.</p>
+
+<pre><code>from digger.tradecraft import rate_source, rate_info
+from digger.tradecraft.admiralty import derive_for_collector
+
+derive_for_collector("processes")    # → "A"
+rate_source("B")                     # → "Usually reliable — ..."
+rate_info("1")                       # → "Confirmed by other sources — ..."</code></pre>
+
+<h2>Traffic Light Protocol (TLP 2.0)</h2>
+
+<p>The FIRST.org sharing-control standard used by CISA, ENISA, FIRST CSIRTs,
+and ISACs.</p>
+
+<table>
+<thead><tr><th>Marking</th><th>Disclosure</th></tr></thead>
+<tbody>
+<tr><td><span class="tlp clear">TLP:CLEAR</span></td><td>Unrestricted disclosure</td></tr>
+<tr><td><span class="tlp green">TLP:GREEN</span></td><td>Limited to peer and partner organizations</td></tr>
+<tr><td><span class="tlp amber">TLP:AMBER</span></td><td>Recipient organization and clients on need-to-know</td></tr>
+<tr><td><span class="tlp amber-strict">TLP:AMBER+STRICT</span></td><td>Recipient organization only</td></tr>
+<tr><td><span class="tlp red">TLP:RED</span></td><td>Named recipients only, no further sharing</td></tr>
+</tbody>
+</table>
+
+<p>The triage schema requires every finding to carry a TLP marking. Exports
+to STIX, MISP, and TAXII attach the marking to every produced object and
+filter by sharing level when requested:</p>
+
+<pre><code>from digger.tradecraft import TLP, can_share, apply_tlp_filter
+
+can_share(TLP.RED, TLP.AMBER)        # → False (can't share red at amber level)
+can_share(TLP.GREEN, TLP.AMBER)      # → True
+
+apply_tlp_filter(findings, TLP.GREEN)  # only findings marked CLEAR/GREEN</code></pre>
+
+<h2>Heuer's Analysis of Competing Hypotheses (ACH)</h2>
+
+<p>Structured Analytic Technique #5 in the ODNI catalog. Defends against
+confirmation bias by enumerating competing hypotheses, listing evidence,
+and grading each <em>(hypothesis, evidence)</em> pair as Consistent /
+Inconsistent / Not Applicable.</p>
+
+<p>The "winning" hypothesis is the one that minimizes <em>inconsistencies</em>
+— not the one with the most consistencies (which would bias toward whichever
+hypothesis is the easiest to confirm).</p>
+
+<pre><code>from digger.tradecraft import build_matrix
+
+m = build_matrix(
+    hypotheses=["H1: legitimate dev tooling",
+                "H2: targeted post-exploitation"],
+    evidence=["E1: cron job in /etc/cron.d",
+              "E2: connections to webhook.site",
+              "E3: binary signed by JetBrains"],
+    ratings=[
+        ["C", "C"],   # E1 consistent with both
+        ["I", "C"],   # E2 inconsistent with H1
+        ["C", "I"],   # E3 inconsistent with H2
+    ],
+)
+
+m.inconsistency_scores()    # → [1, 1]   (tied)
+m.winning_hypothesis()      # → 0 or 1 (tie broken by most-consistent)</code></pre>
+
+<p>The AI triage prompt asks the model to volunteer at least two competing
+hypotheses for every finding. They're stored in the
+<code>alternative_hypotheses</code> field and rendered in the report.</p>
+
+<h2>How they compose in the report</h2>
+
+<p>Each triaged finding in the HTML report shows:</p>
+<ul>
+<li>Severity pill + IC verdict (false_positive .. confirmed_malicious)</li>
+<li>Estimative probability label + analytic confidence</li>
+<li>Source reliability (A-F) and information credibility (1-6)</li>
+<li>TLP marking</li>
+<li>One-line summary + rationale + assumptions + alternative hypotheses</li>
+<li>Next steps and IOCs</li>
+</ul>
+
+<p>The case-wide executive summary aggregates these into one overall
+probability, one overall confidence, key judgments, and attribution hint
+when signals converge.</p>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

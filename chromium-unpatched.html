@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unpatched Chromium bugs — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="chromium-unpatched">
+<main>
+
+<h1>Unpatched Chromium bugs
+  <span class="subtitle">A corpus for "known-bug-the-vendor-won't-fix-but-affects-every-Chrome-user" issues.</span>
+</h1>
+
+<p>Some Chromium bugs are disclosed but never patched — sometimes for
+years. Project Zero has the most famous tracker for these but it
+focuses on 90-day-disclosure outcomes; what's missing is a
+<em>persistent</em>, machine-readable corpus of issues that affect every
+Chromium user right now and where the only remediation is a workaround.</p>
+
+<p>digger ships
+<code>digger/rules/browsers/chromium_unpatched.yaml</code> as that
+corpus. <code>BrowserDetector</code> consumes it; adding a new entry
+fires a new finding with <strong>zero code changes</strong>.</p>
+
+<h2>The canary: crbug-40062121</h2>
+
+<p>The seed entry is <a href="https://issues.chromium.org/issues/40062121">crbug
+40062121</a> — disclosed summer 2022 by Lyra Rebane. Mechanism: a
+registered service worker can keep firing background fetches and keep
+its parent registration alive long after the tab that installed it has
+closed, effectively turning the browser into a permanent botnet node
+controlled by the registering origin.</p>
+
+<p>The Chromium ticket was made private shortly after disclosure. No
+patch has shipped to date. Every Chromium-based browser
+(Chrome / Edge / Brave / Arc / Vivaldi / Opera) at every version is
+affected.</p>
+
+<p>digger emits a high-severity finding on every Chrome profile that has
+<em>any</em> registered service worker, with the workaround attached:</p>
+
+<pre><code>$ digger scan --case-dir /tmp/case
+  [    high]  short_id=40062121  profile=Default     origins=34
+           Unpatched Chromium bug 40062121 applies on profile Default:
+           Persistent service-worker + background-fetch botnet primitive
+
+           Workarounds:
+             - Open chrome://serviceworker-internals and unregister any
+               origins you do not recognize
+             - Periodically purge ~/Library/Application Support/&lt;browser&gt;/
+               &lt;profile&gt;/Service Worker/ (browser quit first)
+             - Disable site-isolation/notification permissions on origins
+               not actively needed
+</code></pre>
+
+<h2>Corpus schema</h2>
+
+<p>Each entry in <code>chromium_unpatched.yaml</code>:</p>
+
+<pre><code>issues:
+  - id: crbug-40062121         # digger stable identifier
+    short_id: "40062121"       # upstream bug tracker number
+    title: ...                 # human-readable one-liner
+    url:   ...                 # upstream bug tracker URL
+    discovered: "2022"         # year first observed
+    disclosed:  "2022"         # year publicly disclosed
+    vendor_status: "private"   # one of: private | won't fix | out of scope | pending
+    affected_versions: "all"   # "all" = open-ended unpatched
+    impact: "high"             # info | low | medium | high | critical
+    detection_signal:
+      kind: service_worker_presence   # see Detection signals below
+      threshold: any                  # "any" or integer count
+    workaround:
+      - "..."                  # operator-actionable mitigations
+    references: ["..."]
+    notes: |                   # free-form context
+      ...
+</code></pre>
+
+<h2>Detection signals (extensible)</h2>
+
+<p>The detector recognizes:</p>
+
+<ul class="kv">
+  <li><b><code>service_worker_presence</code></b> — fires when a
+    <code>chrome.service_workers</code> artifact has registered origins.
+    <code>threshold: any</code> or an integer count.</li>
+</ul>
+
+<p>Future detection_signal kinds can be added by extending the dispatch
+table in <code>digger/detectors/browser.py</code>:</p>
+
+<ul class="kv">
+  <li><code>extension_perm</code> — match against a permission name in
+    installed-extensions data.</li>
+  <li><code>profile_default</code> — match a Preferences-JSON path
+    (e.g., a deprecated default that lets a site override security
+    posture).</li>
+  <li><code>always_fire</code> — for bugs where presence is universal;
+    fires on every Chromium profile.</li>
+</ul>
+
+<h2>Adding a new entry</h2>
+
+<p>No code changes required. Append to
+<code>digger/rules/browsers/chromium_unpatched.yaml</code>:</p>
+
+<pre><code>  - id: crbug-NEW
+    short_id: "NEW"
+    title: "Short description of the bug"
+    url: "https://issues.chromium.org/issues/NEW"
+    vendor_status: "won't fix"
+    affected_versions: "all"
+    impact: "medium"
+    detection_signal:
+      kind: service_worker_presence
+      threshold: any
+    workaround:
+      - "what the operator should do"
+    references:
+      - "https://example.com/advisory"
+</code></pre>
+
+<p>Re-run <code>digger scan</code> and findings for the new bug
+appear.</p>
+
+<h2>Why digger-curated, not live-feed?</h2>
+
+<p>The <a href="intel.html">live-first convention</a> requires that
+every bundled rule have a live-feed counterpart. The
+<code>chromium_unpatched.yaml</code> corpus is an explicit
+<code># live-first-ok</code> opt-out: no canonical "vendor-won't-fix
+browser bugs" feed exists today. When one is published in a stable
+machine-readable form (e.g., a future Project Zero data export), digger
+swaps to <code>load_intel()</code> with this file as fallback per the
+established convention.</p>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>

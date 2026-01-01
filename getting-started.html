@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Getting started — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="getting-started">
+<main>
+
+<h1>Getting started
+  <span class="subtitle">Install, run your first case, and point AI triage at a local LLM.</span>
+</h1>
+
+<h2>Install</h2>
+
+<p>digger is pure Python ≥ 3.10. Base install needs <code>psutil</code>,
+<code>requests</code>, <code>pyyaml</code>, <code>rich</code>. Optional extras
+pull in YARA, Windows registry parsing, GeoIP, etc.</p>
+
+<pre><code># Clone or download, then from the repo root:
+pip install -e .
+
+# Recommended — every optional feature:
+pip install -e ".[all]"
+
+# Add the AES-256-GCM hybrid encryption helper:
+pip install cryptography
+
+# Add post-quantum cryptography:
+pip install oqs   # after building liboqs; see https://openquantumsafe.org</code></pre>
+
+<h2>First case</h2>
+
+<pre><code># 1. Collect every artifact this user is allowed to read
+digger collect --case-dir ./case-2026-01
+
+# 2. Run the detection stack against the collected evidence
+digger scan --case-dir ./case-2026-01
+
+# 3. Verify the evidence hash chain
+digger verify --case-dir ./case-2026-01
+
+# 4. Render a self-contained HTML report
+digger report --case-dir ./case-2026-01 --format html --out ./case-2026-01/report.html</code></pre>
+
+<p>or just:</p>
+
+<pre><code>digger investigate --case-dir ./case-2026-01 --report ./report.html</code></pre>
+
+<blockquote class="note">
+<strong>Privileges.</strong> Some artifacts require elevation (Windows EVTX,
+Linux auditd, macOS unified logs at depth, /var/log/auth.log on some distros).
+Run with <code>sudo</code> / <code>runas administrator</code> when you can.
+Collectors that need admin but don't have it are skipped, not failed.
+</blockquote>
+
+<h2>Pointing AI triage at a local LLM</h2>
+
+<p>Triage talks to any OpenAI-compatible <code>/v1/chat/completions</code> endpoint.
+Three common setups:</p>
+
+<h3>llama.cpp</h3>
+<pre><code># Pull a GGUF — anything that can JSON-format works
+huggingface-cli download zai-org/GLM-4.6-GGUF GLM-4.6-Q4_K_M.gguf --local-dir ./models
+
+# Serve it
+llama-server -m ./models/GLM-4.6-Q4_K_M.gguf \
+    --host 127.0.0.1 --port 8080 -c 32768 --jinja
+
+# Then triage
+digger triage --case-dir ./case-2026-01 \
+    --llm-base-url http://127.0.0.1:8080/v1 \
+    --llm-model GLM-4.6</code></pre>
+
+<h3>ollama</h3>
+<pre><code>ollama serve
+ollama pull qwen2.5:14b-instruct
+digger triage --case-dir ./case-2026-01 \
+    --llm-base-url http://127.0.0.1:11434/v1 \
+    --llm-model qwen2.5:14b-instruct</code></pre>
+
+<h3>Environment variables</h3>
+<pre><code>export DIGGER_LLM_BASE_URL=http://127.0.0.1:8080/v1
+export DIGGER_LLM_MODEL=GLM-4.6
+export DIGGER_LLM_API_KEY=local
+export DIGGER_LLM_TEMPERATURE=0.2
+digger triage --case-dir ./case-2026-01</code></pre>
+
+<h2>Government / regulated environments</h2>
+
+<p>Run in FIPS 140-3 mode (refuses non-approved algorithms, runs known-answer
+tests at startup) and tag the case with classification + TLP:</p>
+
+<pre><code>digger --fips-mode \
+       --classification CUI \
+       --tlp TLP:AMBER+STRICT \
+       investigate --case-dir ./case-2026-01
+
+# Generate compliance reports against named frameworks
+digger compliance assess --case-dir ./case-2026-01 \
+       --frameworks nist_800_171,cmmc_2_0,iso_27001
+
+# PQC-sign the chain tip
+digger pqc sign --case-dir ./case-2026-01 \
+       --algorithm ML-DSA-65 --key /secrets/digger.sk
+
+# Export to STIX 2.1 for sharing
+digger export stix --case-dir ./case-2026-01 --tlp TLP:AMBER</code></pre>
+
+<h2>Common flags</h2>
+
+<table>
+<thead><tr><th>Flag</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>--no-banner</code></td><td>Suppress the ASCII banner (use in scripts/CI)</td></tr>
+<tr><td><code>--fips-mode</code></td><td>Enable FIPS 140-3 restrictions; runs KATs first</td></tr>
+<tr><td><code>--classification</code></td><td>Classification marking written to chain of custody</td></tr>
+<tr><td><code>--tlp</code></td><td>Default TLP marking (CLEAR | GREEN | AMBER | AMBER+STRICT | RED)</td></tr>
+<tr><td><code>--only</code></td><td>Comma-separated collector/detector names to run only</td></tr>
+<tr><td><code>--no-admin</code></td><td>Skip every collector that requires elevation</td></tr>
+</tbody>
+</table>
+
+<h2>Where evidence lives</h2>
+
+<pre><code>./case-2026-01/
+├── evidence.db                 SQLite store (artifacts + findings + hash chain)
+├── chain_of_custody.json       ISO 27037 / NIST 800-86 record
+├── case_signature.json         PQC signature over chain tip (after `digger pqc sign`)
+├── files/                      preserved evidence files
+├── compliance/                 framework reports (after `compliance assess`)
+└── report.html                 final triaged report</code></pre>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

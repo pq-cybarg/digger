@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Evidence store — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="evidence-store">
+<main>
+
+<h1>Evidence store
+  <span class="subtitle">SQLite, append-only, paired SHA-256 + SHA3-256 hash chain, optionally PQC-signed.</span>
+</h1>
+
+<h2>What it is</h2>
+
+<p>One file: <code>evidence.db</code>. SQLite. Every artifact and finding is
+a row. Every row carries <em>two</em> independent content hashes
+(<code>data_sha256</code> and <code>data_sha3_256</code>) and <em>two</em>
+independent chain hashes (<code>chain_sha256</code> and
+<code>chain_sha3_256</code>) that thread through the table in parallel.
+Any post-hoc modification breaks <strong>both</strong> chains from that
+point forward, and any subsequent PQC signature over the tip is invalid.</p>
+
+<h2>Why two algorithms in parallel?</h2>
+
+<p><strong>Defense in depth.</strong> SHA-256 (FIPS 180-4) and SHA3-256
+(FIPS 202) use structurally independent constructions — Merkle-Damgård
+vs. Keccak sponge. A future cryptanalytic break against one family is
+unlikely to break the other. To forge undetectable tampering, an attacker
+would need to find a colliding-content modification in <em>both</em>
+algorithms simultaneously.</p>
+
+<p>SHA-256 stays in place for ecosystem interoperability — VirusTotal,
+MalwareBazaar, signature-base, IOC feeds, git, sigstore: every external
+consumer of evidence hashes speaks SHA-256. SHA3-256 hardens digger's
+own integrity layer without losing that compatibility.</p>
+
+<p>The PQC signature emitted by <code>digger pqc sign</code> covers the
+chain tip JSON which includes both digests + the algorithm list, so a
+single signature attests to both chains.</p>
+
+<p>Source: <code>digger/core/evidence.py</code>.</p>
+
+<h2>Tables</h2>
+
+<h3><code>artifacts</code></h3>
+<table>
+<thead><tr><th>Column</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>id</code></td><td>Auto-increment row id (NOT the artifact UUID)</td></tr>
+<tr><td><code>artifact_uuid</code></td><td>UUIDv4, unique. Used as the foreign-key target for findings.</td></tr>
+<tr><td><code>collector</code></td><td>The collector's <code>name</code> (e.g. <code>processes</code>, <code>macos.launchd</code>)</td></tr>
+<tr><td><code>category</code></td><td>Coarse grouping (<code>process</code>, <code>persistence</code>, <code>network</code>, …)</td></tr>
+<tr><td><code>subject</code></td><td>Human-readable subject (<code>pid=312 chrome</code>, <code>HKLM\…\Run</code>)</td></tr>
+<tr><td><code>ts</code></td><td>Wall-clock timestamp when the artifact was collected</td></tr>
+<tr><td><code>data_json</code></td><td>Canonical JSON serialization of the data dict</td></tr>
+<tr><td><code>data_sha256</code></td><td>SHA-256 of <code>collector|category|subject|data_json</code></td></tr>
+<tr><td><code>data_sha3_256</code></td><td>SHA3-256 of the same payload</td></tr>
+<tr><td><code>chain_sha256</code></td><td>SHA-256 of <code>prev_chain_sha256 || data_sha256</code></td></tr>
+<tr><td><code>chain_sha3_256</code></td><td>SHA3-256 of <code>prev_chain_sha3_256 || data_sha3_256</code></td></tr>
+</tbody>
+</table>
+
+<h3><code>findings</code></h3>
+<table>
+<thead><tr><th>Column</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>finding_uuid</code></td><td>UUIDv4, unique</td></tr>
+<tr><td><code>detector</code></td><td>Detector <code>name</code> that emitted it</td></tr>
+<tr><td><code>severity</code></td><td>Enum: <span class="pill info">info</span> <span class="pill low">low</span> <span class="pill med">med</span> <span class="pill high">high</span> <span class="pill crit">crit</span></td></tr>
+<tr><td><code>title</code> / <code>summary</code></td><td>Headline + 2-5 sentence explanation</td></tr>
+<tr><td><code>artifact_refs</code></td><td>JSON array of artifact UUIDs implicated</td></tr>
+<tr><td><code>evidence_json</code></td><td>Free-form evidence dict</td></tr>
+<tr><td><code>mitre</code></td><td>Primary MITRE ATT&amp;CK technique ID (e.g. <code>T1059.001</code>)</td></tr>
+<tr><td><code>data_sha256</code> / <code>data_sha3_256</code></td><td>Paired content hashes (same scheme as artifacts)</td></tr>
+<tr><td><code>chain_sha256</code> / <code>chain_sha3_256</code></td><td>Paired chain hashes (same scheme as artifacts)</td></tr>
+<tr><td><code>triage_json</code></td><td>The AI triage output (NULL if not yet triaged). NOT covered by the chain.</td></tr>
+</tbody>
+</table>
+
+<h3><code>case_meta</code></h3>
+<p>Simple key/value store for case-level metadata: <code>case_id</code>,
+<code>host</code> fingerprint, <code>classification</code>, <code>tlp</code>,
+<code>ai_case_summary</code>, <code>ai_triage_run</code>, etc.</p>
+
+<h3><code>files</code></h3>
+<p>Index of preserved evidence files (path, size, SHA-256, link to owning artifact).</p>
+
+<h3><code>log</code></h3>
+<p>Append-only operational log written by collectors and detectors during a run.</p>
+
+<h2>The hash chain</h2>
+
+<p>For every row, we compute:</p>
+
+<pre><code>chain_sha256[n]   = SHA-256  ( chain_sha256[n-1]   || data_sha256[n]   )
+chain_sha3_256[n] = SHA3-256 ( chain_sha3_256[n-1] || data_sha3_256[n] )</code></pre>
+
+<p>where <code>content_hash[n]</code> is the SHA-256 of the row's canonical
+content. The very first row uses an empty prev-hash (zero-length input
+prefix).</p>
+
+<p><code>store.verify_chain()</code> recomputes both the content hash and the
+chain hash for every row. Any divergence is recorded in
+<code>result["errors"]</code>:</p>
+
+<pre><code>$ digger verify --case-dir ./case-1
+{
+  "artifacts_ok": { "sha256": true, "sha3_256": true, "all": true },
+  "findings_ok":  { "sha256": true, "sha3_256": true, "all": true },
+  "errors": []
+}</code></pre>
+
+<p>The CLI exits non-zero if any chain check fails.</p>
+
+<h2>Tamper detection in practice</h2>
+
+<p>Suppose someone edits an artifact's <code>data_json</code> directly with
+sqlite3 to scrub evidence of a malicious process. The next call to
+<code>verify_chain()</code> will report:</p>
+
+<pre><code>artifact id=42 content hash mismatch
+artifact id=43 chain hash mismatch     ← cascades to every later row
+artifact id=44 chain hash mismatch
+...</code></pre>
+
+<p>The cascade is the important part. You can identify the precise row where
+tampering began.</p>
+
+<h2>Signing the chain tip</h2>
+
+<p>For long-term integrity, sign the tip with a NIST PQC algorithm:</p>
+
+<pre><code>digger pqc sign --case-dir ./case-1 \
+       --algorithm ML-DSA-65 \
+       --key /secrets/digger.sk    # auto-generated if missing</code></pre>
+
+<p>This writes <code>case_signature.json</code> containing the signed payload
+(the concatenated artifacts + findings tips and the case_id), the algorithm
+OID, and the public key. To verify later:</p>
+
+<pre><code>digger pqc verify --case-dir ./case-1</code></pre>
+
+<p>Defaults to <code>ML-DSA-65</code> (FIPS 204, NIST Level 3). See
+<a href="pqc.html">post-quantum crypto</a> for the full algorithm catalog.</p>
+
+<h2>What's <em>not</em> in the chain</h2>
+
+<ul>
+<li><strong><code>triage_json</code></strong> — AI triage output is written
+  after the fact and is not part of the hash chain. This is intentional: it
+  lets you re-run triage with a different model without invalidating the
+  forensic chain. If you want to attest to a specific triage run, snapshot
+  the case directory and sign the snapshot.</li>
+<li><strong><code>case_meta</code></strong>, <strong><code>files</code></strong>,
+  <strong><code>log</code></strong> — these change during normal operation
+  (e.g. when you re-render reports) and aren't load-bearing for forensic
+  integrity.</li>
+</ul>
+
+<h2>Working with the DB directly</h2>
+
+<p>If you want to slice the data outside digger, the schema is standard
+SQLite. Example queries:</p>
+
+<pre><code># Every high-or-critical finding with its detector and rationale
+sqlite3 case-1/evidence.db <<'SQL'
+SELECT severity, detector, title FROM findings
+WHERE severity IN ('high', 'critical')
+ORDER BY id;
+SQL
+
+# Every process artifact with its parent
+sqlite3 case-1/evidence.db <<'SQL'
+SELECT json_extract(data_json, '$.pid'),
+       json_extract(data_json, '$.ppid'),
+       json_extract(data_json, '$.name'),
+       json_extract(data_json, '$.cmdline')
+FROM artifacts WHERE collector='processes' LIMIT 20;
+SQL</code></pre>
+
+<p>Read-only access is safe. Writes are not — they break the chain.</p>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 560" role="img" aria-label="digger pipeline diagram">
+  <defs>
+    <linearGradient id="boxBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a2030"/>
+      <stop offset="100%" stop-color="#10141c"/>
+    </linearGradient>
+    <linearGradient id="storeBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3a3520"/>
+      <stop offset="100%" stop-color="#26230f"/>
+    </linearGradient>
+    <linearGradient id="outBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a2a30"/>
+      <stop offset="100%" stop-color="#0e1a20"/>
+    </linearGradient>
+    <marker id="arrowHead" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#d0c39a"/>
+    </marker>
+    <marker id="arrowDim" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#6a6f7c"/>
+    </marker>
+    <style>
+      .box        { fill: url(#boxBg);   stroke: #2a2f3a; stroke-width: 1.5 }
+      .box.store  { fill: url(#storeBg); stroke: #d0c39a; stroke-width: 2 }
+      .box.out    { fill: url(#outBg);   stroke: #2a2f3a }
+      .title      { fill: #d0c39a; font-family: -apple-system, Inter, system-ui, sans-serif;
+                    font-weight: 700; font-size: 14px; letter-spacing: 0.5px;
+                    text-transform: uppercase }
+      .body       { fill: #aab0bd; font-family: -apple-system, Inter, system-ui, sans-serif;
+                    font-size: 12px }
+      .body.em    { fill: #d0c39a; font-weight: 600 }
+      .arrow      { stroke: #d0c39a; stroke-width: 2;   fill: none }
+      .arrow.dim  { stroke: #6a6f7c; stroke-width: 1.5; fill: none; stroke-dasharray: 5 4 }
+      .arrow-label{ fill: #cfd4df; font-family: Iosevka, Menlo, monospace;
+                    font-size: 11px; letter-spacing: 0.4px }
+      .arrow-label.muted { fill: #8a8f99 }
+    </style>
+  </defs>
+
+  <!-- ===================================================== -->
+  <!-- Row 1 — inputs and analysis (y = 40..130)            -->
+  <!-- ===================================================== -->
+  <g transform="translate(40, 40)">
+    <rect class="box" width="300" height="90" rx="10"/>
+    <text class="title" x="16" y="26">Collectors</text>
+    <text class="body" x="16" y="48">~30 platform-aware modules</text>
+    <text class="body" x="16" y="66">processes · network · persistence</text>
+    <text class="body" x="16" y="82">browsers · logs · packages · SSH</text>
+  </g>
+
+  <g transform="translate(420, 40)">
+    <rect class="box" width="300" height="90" rx="10"/>
+    <text class="title" x="16" y="26">Live threat intel</text>
+    <text class="body" x="16" y="48">12 feeds, per-feed cadences</text>
+    <text class="body" x="16" y="66">CISA KEV · ThreatFox · URLhaus</text>
+    <text class="body" x="16" y="82">MalwareBazaar · Shai-Hulud · …</text>
+  </g>
+
+  <g transform="translate(800, 40)">
+    <rect class="box" width="300" height="90" rx="10"/>
+    <text class="title" x="16" y="26">Detectors</text>
+    <text class="body" x="16" y="48">14 modules</text>
+    <text class="body" x="16" y="66">behavioral · YARA · IOC · Sigma</text>
+    <text class="body" x="16" y="82">C2 · supply-chain · LOKI · actor</text>
+  </g>
+
+  <!-- Live intel → Detectors  (horizontal in row 1) -->
+  <path class="arrow dim" d="M 720 85 L 800 85" marker-end="url(#arrowDim)"/>
+  <text class="arrow-label muted" x="730" y="78">live IOCs</text>
+
+  <!-- ===================================================== -->
+  <!-- Vertical arrows between row 1 and the store (row 2)  -->
+  <!-- Gap region: y=130..210, no boxes here.               -->
+  <!-- ===================================================== -->
+
+  <!-- Collectors → Store (Artifacts) — straight down -->
+  <path class="arrow" d="M 190 130 L 190 210" marker-end="url(#arrowHead)"/>
+  <text class="arrow-label" x="200" y="174">Artifacts</text>
+
+  <!-- Detectors → Store (Findings) — straight down -->
+  <path class="arrow" d="M 970 130 L 970 210" marker-end="url(#arrowHead)"/>
+  <text class="arrow-label" x="980" y="174">Findings</text>
+
+  <!-- Store → Detectors (reads Artifacts) — straight up, parallel -->
+  <path class="arrow dim" d="M 910 210 L 910 130" marker-end="url(#arrowDim)"/>
+  <text class="arrow-label muted" x="846" y="174">reads ←</text>
+
+  <!-- ===================================================== -->
+  <!-- Row 2 — Evidence Store (y = 210..350)                -->
+  <!-- ===================================================== -->
+  <g transform="translate(120, 210)">
+    <rect class="box store" width="900" height="140" rx="12"/>
+    <text class="title" x="22" y="30">Evidence store</text>
+    <text class="body em" x="22" y="56">SQLite · append-only · paired SHA-256 + SHA3-256 chain</text>
+    <text class="body" x="22" y="76">artifacts · findings · case_meta · log · files</text>
+    <text class="body" x="22" y="96">tamper-evident · PQC-signable tip</text>
+    <text class="body" x="22" y="116">ISO 27037 chain of custody (sidecar)</text>
+    <text class="body" x="22" y="132" style="font-family:Iosevka,Menlo,monospace;font-size:11px;fill:#8a8f99">/case-N/evidence.db</text>
+  </g>
+
+  <!-- ===================================================== -->
+  <!-- Vertical arrows between store and row 3              -->
+  <!-- Gap region: y=350..430, no boxes here.               -->
+  <!-- ===================================================== -->
+
+  <!-- Forensic integrity ↔ Store (bidirectional, sign/verify) -->
+  <path class="arrow dim" d="M 240 430 L 240 350"
+        marker-start="url(#arrowDim)" marker-end="url(#arrowDim)"/>
+  <text class="arrow-label muted" x="255" y="394">sign · verify</text>
+
+  <!-- Store → AI triage (findings) -->
+  <path class="arrow" d="M 540 350 L 540 430" marker-end="url(#arrowHead)"/>
+  <text class="arrow-label" x="475" y="394">findings</text>
+
+  <!-- AI triage → Store (writes triage_json) -->
+  <path class="arrow dim" d="M 600 430 L 600 350" marker-end="url(#arrowDim)"/>
+  <text class="arrow-label muted" x="612" y="394">triage</text>
+
+  <!-- ===================================================== -->
+  <!-- Row 3 — Forensic integrity / AI triage / Outputs     -->
+  <!-- ===================================================== -->
+  <g transform="translate(40, 430)">
+    <rect class="box" width="300" height="90" rx="10"/>
+    <text class="title" x="16" y="26">Forensic integrity</text>
+    <text class="body" x="16" y="48">verify_chain() — SHA-256 + SHA3-256</text>
+    <text class="body" x="16" y="66">PQC sign — ML-DSA-65 (FIPS 204)</text>
+    <text class="body" x="16" y="82">chain_of_custody.json</text>
+  </g>
+
+  <g transform="translate(420, 430)">
+    <rect class="box" width="300" height="90" rx="10"/>
+    <text class="title" x="16" y="26">AI triage</text>
+    <text class="body" x="16" y="48">local LLM, OpenAI-compatible</text>
+    <text class="body" x="16" y="66">ICD 203 · NATO Admiralty · TLP</text>
+    <text class="body" x="16" y="82">writes findings.triage_json</text>
+  </g>
+
+  <g transform="translate(800, 430)">
+    <rect class="box out" width="300" height="90" rx="10"/>
+    <text class="title" x="16" y="26">Outputs</text>
+    <text class="body" x="16" y="48">HTML / Markdown / JSON report</text>
+    <text class="body" x="16" y="66">STIX 2.1 · MISP · ATT&amp;CK Navigator</text>
+    <text class="body" x="16" y="82">per-framework compliance reports</text>
+  </g>
+
+  <!-- AI triage → Outputs (horizontal in row 3) -->
+  <path class="arrow" d="M 720 475 L 800 475" marker-end="url(#arrowHead)"/>
+  <text class="arrow-label" x="734" y="468">triaged</text>
+
+  <!-- ===================================================== -->
+  <!-- Caption                                                -->
+  <!-- ===================================================== -->
+  <text class="body" x="570" y="548" text-anchor="middle"
+        style="fill:#6a6f7c;font-size:11.5px;font-family:Iosevka,Menlo,monospace">
+    one append-only evidence store · every module reads or writes it · nothing communicates out-of-band
+  </text>
+</svg>

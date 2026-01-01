@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLI reference — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="cli">
+<main>
+
+<h1>CLI reference
+  <span class="subtitle">Every <code>digger</code> sub-command, in one place.</span>
+</h1>
+
+<h2>Global flags</h2>
+
+<table>
+<thead><tr><th>Flag</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>--no-banner</code></td><td>Suppress the ASCII banner. Use in scripts/CI.</td></tr>
+<tr><td><code>--fips-mode</code></td><td>Enter FIPS 140-3 restricted mode. Runs KAT self-tests; refuses non-approved algorithms.</td></tr>
+<tr><td><code>--classification &lt;label&gt;</code></td><td>Classification marking (default <code>UNCLASSIFIED</code>) — written to the case metadata and chain of custody.</td></tr>
+<tr><td><code>--tlp &lt;level&gt;</code></td><td>Default TLP marking. One of <code>TLP:CLEAR</code>, <code>TLP:GREEN</code>, <code>TLP:AMBER</code>, <code>TLP:AMBER+STRICT</code>, <code>TLP:RED</code>.</td></tr>
+<tr><td><code>--version</code></td><td>Print version and exit.</td></tr>
+</tbody>
+</table>
+
+<h2><code>collect</code></h2>
+
+<pre><code>digger collect --case-dir DIR [--only NAMES] [--no-admin]</code></pre>
+
+<p>Run platform-appropriate collectors. Writes a fresh case directory if one
+doesn't exist, or appends to an existing one (with chain continuity).</p>
+
+<dl class="kv">
+  <dt>--case-dir</dt><dd>Output directory. Created if missing.</dd>
+  <dt>--only NAMES</dt><dd>Comma-separated collector names. Run <code>digger collect --case-dir x --only system</code> to inventory the collector roster.</dd>
+  <dt>--no-admin</dt><dd>Skip every collector marked <code>requires_admin</code>.</dd>
+</dl>
+
+<h2><code>scan</code></h2>
+
+<pre><code>digger scan --case-dir DIR [--only NAMES]</code></pre>
+
+<p>Run the detection stack against an already-collected case directory.
+Detectors are read-only over artifacts but write Findings.</p>
+
+<h2><code>triage</code></h2>
+
+<pre><code>digger triage --case-dir DIR
+              [--llm-base-url URL] [--llm-model NAME] [--llm-api-key KEY]
+              [--skip-below LEVEL] [--only DETECTORS] [--max N]
+              [--no-case-summary] [--force]</code></pre>
+
+<p>AI-triage findings via a local OpenAI-compatible LLM. Writes triage JSON
+into each finding and a case-wide summary into case metadata.</p>
+
+<dl class="kv">
+  <dt>--llm-base-url</dt><dd>Defaults to <code>http://127.0.0.1:8080/v1</code> (llama.cpp default).</dd>
+  <dt>--llm-model</dt><dd>Defaults to <code>GLM-4.6</code>. Anything your server has loaded works.</dd>
+  <dt>--skip-below</dt><dd>Skip findings below this severity. Default <code>low</code> — skips <code>info</code>-level findings (the timeline).</dd>
+  <dt>--max N</dt><dd>Triage at most N findings, for quick iteration.</dd>
+  <dt>--force</dt><dd>Continue even if the LLM health check fails.</dd>
+</dl>
+
+<h2><code>report</code></h2>
+
+<pre><code>digger report --case-dir DIR --format html|md|json [--out PATH]</code></pre>
+
+<p>Render a self-contained report from the case directory.</p>
+
+<h2><code>investigate</code></h2>
+
+<pre><code>digger investigate --case-dir DIR [--report PATH] [--report-format html|md|json]
+                   [--no-triage] [collect/triage flags…]</code></pre>
+
+<p>One-shot collect + scan + triage + report.</p>
+
+<h2><code>verify</code></h2>
+
+<pre><code>digger verify --case-dir DIR</code></pre>
+
+<p>Recompute every content hash and chain hash in the evidence DB. Exits
+non-zero if any check fails. See <a href="evidence-store.html">evidence store</a>.</p>
+
+<h2><code>intel</code></h2>
+
+<pre><code>digger intel update [--only FEEDS] [--force] [--sign-key PATH] [--sign-alg ALG]
+digger intel status
+digger intel watch [--force-first]
+digger intel sign --key PATH [--algorithm ALG] [--target DIR] [--note TEXT]
+digger intel verify [--target DIR]</code></pre>
+
+<dl class="kv">
+  <dt>update</dt><dd>Refresh feeds whose interval has elapsed. <code>--force</code> bypasses interval; <code>--only</code> limits to specified feeds. <code>--sign-key</code> auto-signs the cache (PQC ML-DSA-65 by default) after fetch; also reads <code>$DIGGER_INTEL_SIGN_KEY</code>.</dd>
+  <dt>status</dt><dd>List feeds with last-fetched age + staleness flag, plus the integrity-signature state (signed / unsigned / re-check needed).</dd>
+  <dt>watch</dt><dd>Run a foreground scheduler that polls feeds on their per-feed cadence indefinitely.</dd>
+  <dt>sign</dt><dd>PQC-sign the current intel cache directory (defense-in-depth against on-disk tampering of fetched feeds).</dd>
+  <dt>verify</dt><dd>Verify the PQC signature against the current intel cache. Returns the dual SHA-256 + SHA3-256 tree-hash roots and file count.</dd>
+</dl>
+
+<p>See <a href="intel.html">live feeds</a> for the full feed list. The
+<code>load_intel</code> helper used by detectors also performs a once-per-process
+signature verification; <code>DIGGER_INTEL_STRICT=1</code> makes it refuse
+unsigned / tampered caches, <code>DIGGER_INTEL_NO_VERIFY=1</code> silences it.</p>
+
+<h2><code>firewall</code></h2>
+
+<pre><code>digger firewall audit --case-dir DIR [--show-remedy] [--verbose]</code></pre>
+
+<dl class="kv">
+  <dt>audit</dt><dd>Run the firewall auditor over collected pf / nftables / iptables / ufw / firewalld / WFP artifacts. <code>--show-remedy</code> prints the exact platform-specific fix commands (with <code>[DESTRUCTIVE]</code> annotations); <code>--verbose</code> includes the full finding summary. digger NEVER auto-applies; the operator copy-pastes. See <a href="firewall-audit.html">Firewall audit + remediation</a>.</dd>
+</dl>
+
+<h2><code>pqc</code></h2>
+
+<pre><code>digger pqc sign --case-dir DIR [--algorithm ALG] [--key PATH] [--note TEXT]
+digger pqc verify --case-dir DIR [--signature PATH]
+digger pqc info [--mode fips|round4|onramp|all]</code></pre>
+
+<dl class="kv">
+  <dt>sign</dt><dd>Sign the evidence chain tip. Default algorithm <code>ML-DSA-65</code>. Auto-generates the keypair if <code>--key</code> doesn't exist.</dd>
+  <dt>verify</dt><dd>Verify a previously-written <code>case_signature.json</code>.</dd>
+  <dt>info</dt><dd>Show available PQC algorithms and which expected ones are missing.</dd>
+</dl>
+
+<h2><code>fips</code></h2>
+
+<pre><code>digger fips status
+digger fips enable [--force]</code></pre>
+
+<dl class="kv">
+  <dt>status</dt><dd>Show current process state, KAT results, detected OS FIPS marker.</dd>
+  <dt>enable</dt><dd>Run KATs and enter FIPS mode. Fails if KAT fails unless <code>--force</code>.</dd>
+</dl>
+
+<p>The global <code>--fips-mode</code> flag is the easier way to opt in for a
+single invocation; <code>fips enable</code> is useful when scripting.</p>
+
+<h2><code>compliance</code></h2>
+
+<pre><code>digger compliance list
+digger compliance assess --case-dir DIR
+       [--frameworks NAMES] [--format html|md|json|all] [--out-dir DIR]</code></pre>
+
+<p>List loadable frameworks or assess a case against them. Reports land under
+<code>&lt;case&gt;/compliance/</code> by default. See
+<a href="compliance.html">compliance frameworks</a>.</p>
+
+<h2><code>export</code></h2>
+
+<pre><code>digger export stix             --case-dir DIR [--out PATH] [--tlp LEVEL]
+digger export misp             --case-dir DIR [--out PATH] [--tlp LEVEL]
+digger export attack-navigator --case-dir DIR [--out PATH]
+digger export taxii            --case-dir DIR
+       --base-url URL --api-root ROOT --collection ID
+       [--username U] [--password P] [--token T] [--tlp LEVEL]</code></pre>
+
+<p>STIX 2.1 bundle, MISP event, MITRE ATT&amp;CK Navigator layer, or push a
+STIX bundle to a TAXII 2.1 server. See <a href="exchange.html">exchange formats</a>.</p>
+
+<h2><code>generate</code></h2>
+
+<pre><code>digger generate sigma --case-dir DIR [--finding UUID] [--out-dir DIR]
+digger generate sigma --from-detectors    [--out-dir DIR]   # no case needed</code></pre>
+
+<dl class="kv">
+  <dt>sigma (per-finding)</dt><dd>Walk the case's findings and emit one Sigma .yml per finding that has a registered generator. Default out-dir: <code>&lt;case&gt;/sigma-out/</code>.</dd>
+  <dt>sigma --from-detectors</dt><dd>Emit one generic Sigma rule per detector that implements <code>to_sigma_template()</code> — independent of any case. Default out-dir: <code>out/sigma/</code>. Useful when you want the SIEM-deployable detection logic without needing to run a case first. See <a href="genrule.html">Generate Sigma from findings</a>.</dd>
+</dl>
+
+<h2><code>sigma</code></h2>
+
+<pre><code>digger sigma --case-dir DIR [--dirs PATH1,PATH2]</code></pre>
+
+<p>Run Sigma rules against the evidence. Default rule directories now
+include both <code>digger/rules/sigma/</code> AND the live SigmaHQ corpus
+cached by the <code>sigmahq_corpus</code> feed (when populated). Pass
+<code>--dirs</code> to add others.</p>
+
+<h2><code>loki</code></h2>
+
+<pre><code>digger loki update [--target DIR]
+digger loki status
+digger loki scan --case-dir DIR</code></pre>
+
+<p>Clone/pull Florian Roth's <code>signature-base</code>, show what's loaded,
+and run the LOKI-style detector. See <a href="loki.html">LOKI / signature-base</a>.</p>
+
+<h2><code>hunt</code></h2>
+
+<pre><code>digger hunt list [--tag TAG] [-v]
+digger hunt run --case-dir DIR [--hunt IDS] [--tag TAG] [--severity LEVEL]
+       [--out PATH] [--format html|md|json] [-v]</code></pre>
+
+<p>Threat-hunting query library — exploratory tabular queries against the
+evidence store. See <a href="hunts.html">Threat hunting</a>.</p>
+
+<h2><code>diff</code></h2>
+
+<pre><code>digger diff --base BASE_CASE_DIR --new NEW_CASE_DIR
+       [--out PATH] [--format html|md|json]</code></pre>
+
+<p>Compare two case directories. Reports added / removed / modified artifacts
+per collector, plus new / resolved / persisted / modified findings.
+Identity matching ignores volatile fields (pid, ephemeral ports, create
+time) so a re-spawned process doesn't show as new. See
+<a href="diff.html">Case diff</a>.</p>
+
+<h2>Environment variables</h2>
+
+<table>
+<thead><tr><th>Variable</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>DIGGER_FIPS_MODE</code></td><td>If set to <code>1</code>/<code>true</code>/<code>yes</code>, enter FIPS mode automatically.</td></tr>
+<tr><td><code>DIGGER_INTEL_DIR</code></td><td>Override the intel cache location (default <code>~/.cache/digger/intel</code>).</td></tr>
+<tr><td><code>DIGGER_LLM_BASE_URL</code></td><td>Default base URL for AI triage.</td></tr>
+<tr><td><code>DIGGER_LLM_MODEL</code></td><td>Default model.</td></tr>
+<tr><td><code>DIGGER_LLM_API_KEY</code></td><td>API key (most local servers ignore this).</td></tr>
+<tr><td><code>DIGGER_LLM_TEMPERATURE</code></td><td>Sampling temperature (default 0.2).</td></tr>
+<tr><td><code>DIGGER_LLM_MAX_TOKENS</code></td><td>Max tokens in triage responses.</td></tr>
+<tr><td><code>DIGGER_LLM_TIMEOUT</code></td><td>HTTP timeout (seconds) per triage call.</td></tr>
+<tr><td><code>DIGGER_TAXII_PASSWORD</code></td><td>Fallback for <code>--password</code>.</td></tr>
+<tr><td><code>DIGGER_TAXII_TOKEN</code></td><td>Fallback for <code>--token</code>.</td></tr>
+<tr><td><code>DIGGER_SHAI_HULUD_URL</code></td><td>Override the Shai-Hulud package list URL.</td></tr>
+<tr><td><code>GITHUB_TOKEN</code></td><td>Used for GitHub Advisory feed if set.</td></tr>
+</tbody>
+</table>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

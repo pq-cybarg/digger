@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Collectors — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="collectors">
+<main>
+
+<h1>Collectors
+  <span class="subtitle">What digger pulls from the host. Cross-platform first, OS-specific where it matters.</span>
+</h1>
+
+<h2>How they work</h2>
+
+<p>Each collector is a subclass of <code>digger.core.collector.Collector</code> with:</p>
+
+<dl class="kv">
+  <dt>name</dt><dd>Unique identifier — used in <code>--only</code>, in detector cross-references, and in artifact rows.</dd>
+  <dt>category</dt><dd>Coarse grouping (<code>process</code>, <code>persistence</code>, <code>network</code>, <code>logs</code>, <code>identity</code>, <code>inventory</code>, …).</dd>
+  <dt>supported_os</dt><dd>Tuple of OSes. Collectors are silently skipped on others.</dd>
+  <dt>requires_admin</dt><dd>If true, collector is skipped (with a logged reason) when not running elevated.</dd>
+</dl>
+
+<p>The runner catches all exceptions per collector — a single failing collector
+never aborts the case. Skip reasons and errors land in <code>log</code>.</p>
+
+<h2>Cross-platform</h2>
+
+<table>
+<thead><tr><th>Name</th><th>What it collects</th><th>Needs admin</th></tr></thead>
+<tbody>
+<tr><td><code>system</code></td><td>Host fingerprint, boot time, uptime, filesystems, CPU/memory</td><td>no</td></tr>
+<tr><td><code>processes</code></td><td>Every running process: pid, ppid, exe, exe SHA-256, cmdline, user, network connections per pid, open files, env sample</td><td>more detail with admin</td></tr>
+<tr><td><code>network</code></td><td>Interfaces, listening sockets, established connections, routing table, ARP cache, hostname/FQDN</td><td>some platforms</td></tr>
+<tr><td><code>users</code></td><td>Current sessions, every local account, sudo/wheel/admin group membership</td><td>no</td></tr>
+<tr><td><code>browsers</code></td><td>Chrome / Edge / Brave / Arc / Vivaldi / Opera / Firefox: history, downloads, extensions (perms + host_permissions), cookies (per-domain counts + bytes — values NEVER captured), saved-passwords summary (counts only), IndexedDB origins+bytes, Local Storage origins+bytes, installed PWAs, profile defaults (search engine / homepage / startup URLs), service workers (origins + script count + storage bytes). See <a href="browser-scanner.html">browser scanner</a>.</td><td>no</td></tr>
+<tr><td><code>env</code></td><td>Process environment with special attention to PATH, LD_PRELOAD, DYLD_INSERT_LIBRARIES, BASH_ENV, PROMPT_COMMAND, proxy vars</td><td>no</td></tr>
+<tr><td><code>dns</code></td><td>/etc/hosts, /etc/resolv.conf, DNS cache (ipconfig /displaydns, scutil --dns, resolvectl)</td><td>no</td></tr>
+<tr><td><code>recent_files</code></td><td>Files modified in the last 14 days under common drop locations (Downloads, Desktop, /tmp, %TEMP%, AppData/Local/Temp, /Users/Shared, /dev/shm…)</td><td>no</td></tr>
+<tr><td><code>installed_software</code></td><td>macOS .app bundles + brew, Linux dpkg/rpm/snap/flatpak, Windows registry Uninstall keys</td><td>no</td></tr>
+<tr><td><code>python_packages</code></td><td><code>pip list</code> in the current interpreter and discovered virtualenvs</td><td>no</td></tr>
+<tr><td><code>npm_packages</code></td><td>package.json + package-lock.json + yarn.lock + pnpm-lock.yaml across common project dirs (max depth 4)</td><td>no</td></tr>
+<tr><td><code>github_workflows</code></td><td>Every <code>.github/workflows/*.yml</code> across local repos — for Shai-Hulud worm detection</td><td>no</td></tr>
+<tr><td><code>ssh_keys</code></td><td><code>~/.ssh</code> contents: authorized_keys, known_hosts, config, key fingerprints</td><td>no — more users with admin</td></tr>
+<tr><td><code>service_versions</code></td><td>Probes <code>&lt;binary&gt; --version</code> for 30+ services (sshd, nginx, apache, redis, postgres, mysql, mongo, openssl, curl, git, docker, php, ruby, go, node, python, kubelet, samba, bind9, etc.) — only from trusted system paths (/usr/bin, /usr/sbin, /opt/homebrew/, etc.). Used by <code>service_cve</code> detector against the live NVD feed.</td><td>no</td></tr>
+<tr><td><code>memory_regions</code></td><td>Per-process VM region snapshot. Records only suspect regions: RWX, anonymous-executable, or file-backed by a drop location.</td><td>some processes only</td></tr>
+<tr><td><code>code_signing</code></td><td>Code-signature status for every running binary via <code>codesign</code> (macOS) / <code>dpkg -V</code> + <code>rpm -V</code> (Linux). Feeds the unsigned-binary detector.</td><td>no</td></tr>
+</tbody>
+</table>
+
+<h2>Windows</h2>
+
+<table>
+<thead><tr><th>Name</th><th>What it collects</th><th>Needs admin</th></tr></thead>
+<tbody>
+<tr><td><code>windows.registry_persistence</code></td><td>Run/RunOnce, Winlogon, Image File Execution Options, AppInit_DLLs, Active Setup, Office Resiliency, COM CLSID, …</td><td>some keys</td></tr>
+<tr><td><code>windows.scheduled_tasks</code></td><td><code>schtasks /query /XML</code> + CSV verbose dump</td><td>no</td></tr>
+<tr><td><code>windows.services</code></td><td>Every service via psutil: name, display name, start type, binpath, account, status</td><td>no</td></tr>
+<tr><td><code>windows.event_logs</code></td><td>Security, System, Application, Sysmon, PowerShell Operational, Defender Operational, Task Scheduler Operational, WMI-Activity, RDP sessions</td><td>yes</td></tr>
+<tr><td><code>windows.defender</code></td><td>Get-MpComputerStatus, Get-MpPreference, Get-MpThreat, Get-MpThreatDetection</td><td>recommended</td></tr>
+<tr><td><code>windows.firewall</code></td><td>Profiles + enabled rules via Get-NetFirewallProfile / Get-NetFirewallRule</td><td>no</td></tr>
+<tr><td><code>windows.wmi_persistence</code></td><td>EventFilter, EventConsumer, FilterToConsumerBinding (MITRE T1546.003)</td><td>recommended</td></tr>
+<tr><td><code>windows.startup_folders</code></td><td>Per-user + all-users Start Menu Startup folders</td><td>no</td></tr>
+</tbody>
+</table>
+
+<h2>macOS</h2>
+
+<table>
+<thead><tr><th>Name</th><th>What it collects</th><th>Needs admin</th></tr></thead>
+<tbody>
+<tr><td><code>macos.launchd</code></td><td>Every <code>/System/Library/Launch*</code>, <code>/Library/Launch*</code>, <code>~/Library/LaunchAgents</code> plist (parsed: ProgramArguments, RunAtLoad, KeepAlive, MachServices, watch paths, …)</td><td>no</td></tr>
+<tr><td><code>macos.login_items</code></td><td>BackgroundTaskManagementAgent btm.plist + osascript fallback (T1547.015)</td><td>no</td></tr>
+<tr><td><code>macos.tcc</code></td><td>TCC.db — apps with camera, mic, screen recording, AppleEvents, full-disk permission</td><td>system DB needs FDA</td></tr>
+<tr><td><code>macos.quarantine</code></td><td>QuarantineEventsV2 — what was downloaded by what app from where</td><td>no</td></tr>
+<tr><td><code>macos.unified_logs</code></td><td><code>log show</code> slices for auth, network, XProtect, Gatekeeper, sudo</td><td>yes</td></tr>
+<tr><td><code>macos.kext</code></td><td>kmutil showloaded + systemextensionsctl list</td><td>no</td></tr>
+<tr><td><code>macos.profiles</code></td><td>Configuration profiles (MDM + manually installed)</td><td>no</td></tr>
+<tr><td><code>macos.security_posture</code></td><td>SIP (csrutil), Gatekeeper (spctl), FileVault (fdesetup), XProtect / MRT versions</td><td>no</td></tr>
+<tr><td><code>macos.firewall</code></td><td>pf ruleset + info + NAT (<code>pfctl -sr</code> / <code>-s info</code> / <code>-s nat</code>) plus the macOS Application Firewall state (<code>socketfilterfw</code>: global state, stealth mode, block-all, logging). Audited by <a href="firewall-audit.html"><code>firewall_audit</code> detector</a>.</td><td>no</td></tr>
+<tr><td><code>macos.privesc</code></td><td>Walks <code>/usr/bin</code>, <code>/usr/sbin</code>, <code>/usr/libexec</code>, <code>/opt/homebrew/{bin,sbin}</code>, <code>/tmp</code>, <code>/private/tmp</code>, <code>/Users/Shared</code>, <code>/Users/*</code>, <code>/private/var/root</code> for setuid/setgid binaries. Each artifact records owner_uid, mode, world-writable, in-system-dir.</td><td>no</td></tr>
+</tbody>
+</table>
+
+<h2>Linux</h2>
+
+<table>
+<thead><tr><th>Name</th><th>What it collects</th><th>Needs admin</th></tr></thead>
+<tbody>
+<tr><td><code>linux.systemd</code></td><td>systemctl list-units + list-unit-files + per-user units; full unit files from /etc/systemd, /usr/lib/systemd, /lib/systemd, /run/systemd</td><td>no</td></tr>
+<tr><td><code>linux.cron</code></td><td>/etc/crontab, /etc/anacrontab, /etc/cron.d, /etc/cron.{hourly,daily,weekly,monthly}, /var/spool/cron, /var/spool/at</td><td>some paths</td></tr>
+<tr><td><code>linux.auth_logs</code></td><td>/var/log/auth.log + secure + journalctl _COMM=sshd / sudo + last / lastb / who</td><td>recommended</td></tr>
+<tr><td><code>linux.audit</code></td><td>auditd.conf, /etc/audit/rules.d, auditctl -l, tail of /var/log/audit/audit.log</td><td>yes</td></tr>
+<tr><td><code>linux.kmod</code></td><td>/proc/modules, lsmod, /etc/modules-load.d, /etc/modprobe.d</td><td>no</td></tr>
+<tr><td><code>linux.sudoers</code></td><td>/etc/sudoers and /etc/sudoers.d/*</td><td>yes</td></tr>
+</tbody>
+</table>
+
+<h2>Selecting and skipping</h2>
+
+<p>List which collectors will run on the current host:</p>
+
+<pre><code>python -c "from digger.collectors import all_collectors; \
+           [print(f'{c.name:30} admin={c.requires_admin}') for c in all_collectors()]"</code></pre>
+
+<p>Run only a subset:</p>
+
+<pre><code>digger collect --case-dir x --only system,processes,network,macos.launchd</code></pre>
+
+<p>Skip everything needing elevation:</p>
+
+<pre><code>digger collect --case-dir x --no-admin</code></pre>
+
+<h2>Adding a new collector</h2>
+
+<p>See the <a href="extending.html">Extending</a> page for the full walkthrough.
+Short version: subclass <code>Collector</code>, yield <code>Artifact</code>s from
+<code>collect()</code>, register in <code>digger/collectors/__init__.py</code>.</p>
+
+<blockquote class="note">
+<strong>Graceful degradation.</strong> Catch <code>PermissionError</code>,
+<code>OSError</code>, <code>subprocess.SubprocessError</code>, and missing
+binaries (<code>shutil.which(...)</code> is None). A collector with no
+artifacts to yield should just return an empty iterator — that's the only
+way the runner can keep going for the next collector.
+</blockquote>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>
