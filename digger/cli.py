@@ -746,6 +746,37 @@ def cmd_k8s_collect(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_slsa_audit(args: argparse.Namespace) -> int:
+    from digger.slsa import audit_local_packages, emit_records_to_store
+    store = EvidenceStore(args.case_dir)
+    try:
+        roots = ([r.strip() for r in args.roots.split(",") if r.strip()]
+                  if args.roots else None)
+        records = audit_local_packages(roots=roots)
+        emitted = emit_records_to_store(records, store)
+        with_att = sum(1 for r in records if r.has_attestation)
+        parse_errs = sum(1 for r in records if r.parse_error)
+        builder_untrusted = sum(
+            1 for r in records
+            if r.builder_trusted is False
+        )
+        print(f"[slsa] packages audited: {len(records)}")
+        print(f"[slsa]   with attestation: {with_att}")
+        print(f"[slsa]   parse errors:     {parse_errs}")
+        print(f"[slsa]   untrusted builder: {builder_untrusted}")
+        print(f"[slsa] artifacts emitted: {emitted}")
+        if args.verbose:
+            print("\nPer-ecosystem breakdown:")
+            eco: dict[str, int] = {}
+            for r in records:
+                eco[r.ecosystem] = eco.get(r.ecosystem, 0) + 1
+            for k, n in sorted(eco.items()):
+                print(f"  {k:12s} {n:>6}")
+    finally:
+        store.close()
+    return 0
+
+
 def cmd_idp_ingest(args: argparse.Namespace) -> int:
     from digger.idp import IdpError, ingest_file
     store = EvidenceStore(args.case_dir)
@@ -1607,6 +1638,31 @@ def build_parser() -> argparse.ArgumentParser:
     pii.add_argument("--verbose", "-v", action="store_true",
                      help="Print event-type distribution")
     pii.set_defaults(func=cmd_idp_ingest)
+
+    ps = sub.add_parser(
+        "slsa",
+        help="SLSA / in-toto build-provenance auditor for locally-"
+             "installed npm + PyPI packages. Flags missing / "
+             "tampered / untrusted-builder / source-mismatched "
+             "attestations.",
+    )
+    s_sub = ps.add_subparsers(dest="slsa_cmd", required=True)
+
+    psa = s_sub.add_parser(
+        "audit",
+        help="Walk node_modules + site-packages, parse every SLSA "
+             "/ in-toto attestation found, emit one Artifact per "
+             "package. SlsaAuditDetector runs on them at digger "
+             "scan time.",
+    )
+    _add_case_arg(psa)
+    psa.add_argument("--roots",
+                     help="Comma-separated directories to search "
+                          "(default: auto-discover ~/node_modules, "
+                          "system site-packages, user-site)")
+    psa.add_argument("--verbose", "-v", action="store_true",
+                     help="Print per-ecosystem breakdown")
+    psa.set_defaults(func=cmd_slsa_audit)
 
     pp = sub.add_parser(
         "plaso",
