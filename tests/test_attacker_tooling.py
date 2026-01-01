@@ -170,3 +170,91 @@ def test_sigma_emitted_for_running_tool(tmp_path):
     assert rule is not None
     assert "attack.t1588.002" in rule["tags"]
     store.close()
+
+
+# ---- T3 deployment-artifact path ---- #
+
+
+def _recent_files(store, paths):
+    """Recent_files collector emits artifacts whose data.entries[].path
+    is the file path on disk."""
+    store.add_artifact(Artifact(
+        collector="recent_files", category="filesystem",
+        subject="recent_files:Downloads",
+        data={"count": len(paths),
+              "entries": [{"path": p, "mtime": 0} for p in paths]},
+    ))
+
+
+def test_z3r0_deployment_detected_via_config_path(tmp_path):
+    """Z3r0 installed via `git clone` + docker compose leaves /.z3r0/config.json
+    behind. Detector picks it up even when nothing is running."""
+    store = _store(tmp_path)
+    _recent_files(store, [
+        "/home/op/.z3r0/config.json",
+        "/home/op/.z3r0/agents/penetration.md",
+        "/home/op/notes.md",
+    ])
+    findings = list(AttackerToolingDetector().detect(store))
+    z3r0 = [f for f in findings
+            if f.evidence.get("kind") == "deployed_attacker_tool"
+            and f.evidence.get("tool") == "z3r0"]
+    assert z3r0, [f.title for f in findings]
+    assert z3r0[0].mitre == "T1588.002"
+    store.close()
+
+
+def test_z3r0_deployment_via_compose_path(tmp_path):
+    store = _store(tmp_path)
+    _recent_files(store, ["/Users/op/repos/Z3r0/docker-compose.prod.yml"])
+    findings = list(AttackerToolingDetector().detect(store))
+    z3r0 = [f for f in findings if f.evidence.get("tool") == "z3r0"]
+    assert z3r0
+    store.close()
+
+
+def test_running_z3r0_process_flagged_critical(tmp_path):
+    store = _store(tmp_path)
+    _proc(store, 100, "z3r0-server", exe="/opt/z3r0/.venv/bin/z3r0-server")
+    findings = list(AttackerToolingDetector().detect(store))
+    z3r0 = [f for f in findings if f.evidence.get("tool") == "z3r0"
+            and f.evidence.get("kind") == "running_attacker_tool"]
+    assert z3r0
+    # dev path → medium (downgraded from critical)
+    assert z3r0[0].severity == "medium"
+    assert z3r0[0].evidence["dev_context"] is True
+    store.close()
+
+
+def test_deployment_detection_self_attributes_dev_clone(tmp_path):
+    """Researcher with Z3r0 checked out in a dev directory should see
+    severity downgraded to medium with the [dev-context] tag."""
+    store = _store(tmp_path)
+    _recent_files(store, ["/Users/dev/Desktop/research/Z3r0/sandbox/Dockerfile"])
+    findings = list(AttackerToolingDetector().detect(store))
+    z3r0 = [f for f in findings if f.evidence.get("tool") == "z3r0"]
+    assert z3r0
+    assert z3r0[0].evidence["dev_context"] is True
+    assert z3r0[0].severity == "medium"
+    assert "[dev-context]" in z3r0[0].title
+    store.close()
+
+
+def test_mythic_compose_deployment_detected(tmp_path):
+    """Same pattern works for Mythic (another red-team multi-agent platform)."""
+    store = _store(tmp_path)
+    _recent_files(store, ["/opt/Mythic/docker-compose.yml"])
+    findings = list(AttackerToolingDetector().detect(store))
+    m = [f for f in findings if f.evidence.get("tool") == "mythic"]
+    assert m
+    store.close()
+
+
+def test_metasploit_directory_match(tmp_path):
+    store = _store(tmp_path)
+    _recent_files(store, ["/opt/metasploit-framework/Gemfile"])
+    findings = list(AttackerToolingDetector().detect(store))
+    msf = [f for f in findings if f.evidence.get("tool") == "metasploit"
+           and f.evidence.get("kind") == "deployed_attacker_tool"]
+    assert msf
+    store.close()
