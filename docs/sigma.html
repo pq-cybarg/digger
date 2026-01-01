@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sigma rules — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="sigma">
+<main>
+
+<h1>Sigma rules
+  <span class="subtitle">Run community Sigma detections against digger's process and network telemetry.</span>
+</h1>
+
+<h2>What we support</h2>
+
+<p><a href="https://github.com/SigmaHQ/sigma">Sigma</a> is the de-facto open
+detection-rule format. digger ships a pragmatic, zero-dependency loader
+that supports a useful subset of the spec — enough to run the bulk of
+real-world process-creation and network-connection rules.</p>
+
+<h2>Where rules come from</h2>
+
+<p>The <code>SigmaLoader</code> walks two directories by default:</p>
+
+<ul class="kv">
+  <li><code>digger/rules/sigma/</code> — bundled rules that ship with
+    digger (small curated set).</li>
+  <li><code>$DIGGER_INTEL_DIR/sigma-corpus/</code> — the live SigmaHQ
+    corpus populated by the <a href="intel.html"><code>sigmahq_corpus</code>
+    feed</a> (24h refresh). After a single <code>digger intel update
+    --only sigmahq_corpus</code>, every SigmaHQ rule tagged
+    command_and_control / credential_access / lateral_movement /
+    privilege_escalation / persistence / defense_evasion /
+    process_creation / network_connection lands in the cache and is
+    picked up here automatically with zero detector-side changes.</li>
+</ul>
+
+<p>Pass <code>--dirs path1,path2</code> to <code>digger sigma</code> to
+add others.</p>
+
+<table>
+<thead><tr><th>Sigma feature</th><th>Supported</th></tr></thead>
+<tbody>
+<tr><td><code>logsource.category: process_creation</code></td><td>Yes — matches against the <code>processes</code> collector</td></tr>
+<tr><td><code>logsource.category: network_connection</code></td><td>Yes — matches against the <code>network</code> collector</td></tr>
+<tr><td><code>detection.&lt;selection&gt;</code> with field map</td><td>Yes</td></tr>
+<tr><td>Modifiers: <code>contains</code>, <code>startswith</code>, <code>endswith</code>, <code>re</code></td><td>Yes</td></tr>
+<tr><td>Conditions: <code>selection</code>, <code>sel1 and sel2</code>, <code>sel1 or sel2</code></td><td>Yes</td></tr>
+<tr><td>Top-level keyword lists</td><td>Yes (matches anywhere in record values)</td></tr>
+<tr><td>Complex conditions with parentheses, count aggregation, near-by correlation</td><td>No — rule skipped silently</td></tr>
+<tr><td>Other log sources (registry_event, dns, file_event, …)</td><td>No</td></tr>
+</tbody>
+</table>
+
+<p>Rules that use unsupported features are silently skipped, not failed.</p>
+
+<h2>Field mappings</h2>
+
+<p>Sigma uses Sysmon-style field names. digger maps them to the equivalent
+fields on its process/network artifacts:</p>
+
+<table>
+<thead><tr><th>Sigma field</th><th>digger artifact field</th></tr></thead>
+<tbody>
+<tr><td><code>Image</code> / <code>exe</code></td><td><code>processes.data.exe</code></td></tr>
+<tr><td><code>CommandLine</code> / <code>cmdline</code></td><td><code>processes.data.cmdline</code> (joined with space)</td></tr>
+<tr><td><code>ParentImage</code></td><td>Resolved via <code>processes.data.ppid</code> → parent's exe</td></tr>
+<tr><td><code>ParentCommandLine</code></td><td>Resolved via ppid → parent's cmdline</td></tr>
+<tr><td><code>User</code> / <code>Username</code></td><td><code>processes.data.username</code></td></tr>
+<tr><td><code>DestinationIp</code> / <code>DestinationHostname</code></td><td><code>network.data.raddr[0]</code></td></tr>
+<tr><td><code>DestinationPort</code></td><td><code>network.data.raddr[1]</code></td></tr>
+</tbody>
+</table>
+
+<h2>Running</h2>
+
+<pre><code># Run with default rule dirs (digger/rules/sigma/)
+digger sigma --case-dir ./case-1
+
+# Run with your own rule directories
+digger sigma --case-dir ./case-1 --dirs ~/sigma-rules,/etc/digger/sigma</code></pre>
+
+<p>Or programmatically:</p>
+
+<pre><code>from digger.exchange.sigma import SigmaDetector
+from pathlib import Path
+
+n = SigmaDetector(dirs=[Path("~/sigma-rules").expanduser()]).run(store)
+print(f"{n} sigma findings")</code></pre>
+
+<h2>Example rule</h2>
+
+<pre><code>title: Encoded PowerShell stager
+id: 11111111-2222-3333-4444-555555555555
+description: powershell.exe with the -EncodedCommand argument and a long base64 blob
+level: high
+tags:
+  - attack.t1059.001
+  - attack.execution
+logsource:
+  category: process_creation
+  product: windows
+detection:
+  selection:
+    Image|endswith: '\powershell.exe'
+    CommandLine|contains:
+      - '-EncodedCommand'
+      - '-enc'
+  condition: selection</code></pre>
+
+<p>When this rule fires, digger emits a Finding tagged with severity
+<code>high</code>, MITRE technique <code>T1059.001</code> (extracted from the
+<code>attack.t1059.001</code> tag), and references to the matched process
+artifact.</p>
+
+<h2>Where to find rules</h2>
+
+<ul>
+<li><a href="https://github.com/SigmaHQ/sigma">SigmaHQ/sigma</a> — the community master rule set</li>
+<li><a href="https://github.com/Neo23x0/sigma">Neo23x0/sigma</a> — Florian Roth's curated set</li>
+<li>Anything you write internally</li>
+</ul>
+
+<p>Drop them under <code>digger/rules/sigma/</code> for them to be picked up
+without <code>--dirs</code>. Subdirectories are supported (the loader uses
+<code>rglob</code>).</p>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

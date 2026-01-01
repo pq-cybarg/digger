@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FIPS 140-3 mode — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="fips">
+<main>
+
+<h1>FIPS 140-3 mode
+  <span class="subtitle">Algorithm restriction, KAT self-test on startup, host posture detection.</span>
+</h1>
+
+<h2>What it does</h2>
+
+<p>Enabling FIPS mode causes digger to:</p>
+
+<ol>
+<li>Run Known-Answer Tests over the FIPS-approved algorithm set
+  (SHA-256, AES-256-GCM, ML-DSA-65, ML-KEM-768). Abort if any KAT fails
+  unless <code>--force</code>.</li>
+<li>Gate every PQC operation through <code>assert_approved_sig()</code> /
+  <code>assert_approved_kem()</code>. Non-finalized algorithms raise
+  <code>FIPSViolation</code>.</li>
+<li>Record the FIPS mode marker in the chain-of-custody record and the
+  evidence log.</li>
+</ol>
+
+<p>Source: <code>digger/fips/mode.py</code>.</p>
+
+<h2>Enabling</h2>
+
+<p>Three equivalent paths:</p>
+
+<pre><code># CLI flag (one-shot)
+digger --fips-mode investigate --case-dir ./case-1
+
+# Environment variable (persistent for a shell)
+export DIGGER_FIPS_MODE=1
+digger investigate --case-dir ./case-1
+
+# Programmatic
+digger fips enable</code></pre>
+
+<h2>FIPS-approved algorithm set</h2>
+
+<h3>Symmetric (FIPS 197 + FIPS 800-38)</h3>
+<pre><code>AES-{128,192,256}-{GCM, CCM, CTR, CBC, KW, XTS(128/256)}</code></pre>
+
+<h3>Hashes (FIPS 180-4 + FIPS 202)</h3>
+<pre><code>SHA-{1, 224, 256, 384, 512, 512/224, 512/256}
+SHA3-{224, 256, 384, 512}
+SHAKE128, SHAKE256</code></pre>
+<p>SHA-1 is permitted for non-signature use only.</p>
+
+<h3>PQC signatures (FIPS 203/204/205/206)</h3>
+<pre><code>ML-DSA-{44, 65, 87}
+SLH-DSA-SHA2-{128,192,256}{s,f}    SLH-DSA-SHAKE-{128,192,256}{s,f}
+Falcon-{512, 1024}                  Falcon-padded-{512, 1024}</code></pre>
+
+<h3>PQC KEMs (FIPS 203)</h3>
+<pre><code>ML-KEM-{512, 768, 1024}</code></pre>
+
+<h2>Status</h2>
+
+<pre><code>$ digger fips status
+{
+  "in_fips_mode_process": false,
+  "self_test": {
+    "sha256_kat": true,
+    "sha3_256_kat": true,
+    "aes_256_gcm": true,
+    "ml_dsa_65": true,
+    "ml_kem_768": true
+  },
+  "os_fips_marker": null
+}</code></pre>
+
+<dl class="kv">
+  <dt>in_fips_mode_process</dt><dd>Whether <em>this</em> Python process is currently in FIPS mode.</dd>
+  <dt>self_test</dt><dd>KAT results for each FIPS algorithm digger uses. <code>true</code> = pass; <code>false</code> = KAT failed; <code>"skipped: …"</code> = algorithm unavailable.</dd>
+  <dt>os_fips_marker</dt><dd>Whether the OS reports FIPS mode (<code>kernel.fips_enabled</code> on Linux, registry value on Windows). <code>null</code> on macOS — Apple's corecrypto module is FIPS-validated by default with no boolean to toggle.</dd>
+</dl>
+
+<h2>What digger checks vs. doesn't</h2>
+
+<table>
+<thead><tr><th>Check</th><th>digger does it</th></tr></thead>
+<tbody>
+<tr><td>Refuse non-approved PQC sig algorithms</td><td>Yes</td></tr>
+<tr><td>Refuse non-approved PQC KEM algorithms</td><td>Yes</td></tr>
+<tr><td>Refuse non-approved symmetric ciphers when called via the helper</td><td>Yes</td></tr>
+<tr><td>Run KAT at startup</td><td>Yes</td></tr>
+<tr><td>Validate liboqs is a CMVP-listed build</td><td>No — outside scope</td></tr>
+<tr><td>Validate OpenSSL FIPS provider is loaded</td><td>No — outside scope</td></tr>
+<tr><td>Enable OS-level FIPS mode</td><td>No — OS responsibility</td></tr>
+</tbody>
+</table>
+
+<blockquote class="warn">
+<strong>digger is not a validated cryptographic module.</strong>
+It enforces algorithm policy at the application layer and runs sanity-check
+KATs. True FIPS 140-3 compliance is a property of the OS, the OpenSSL FIPS
+provider, and the liboqs build — not of this user-mode tool.
+</blockquote>
+
+<h2>Verifying behavior</h2>
+
+<pre><code># Approved algorithm — works
+digger --fips-mode pqc sign --case-dir x --algorithm ML-DSA-65 --key /tmp/k
+
+# Non-approved algorithm — refused with clear remediation
+digger --fips-mode pqc sign --case-dir x --algorithm CROSS-rsdp-128-balanced --key /tmp/k
+# → FIPSViolation: signature algorithm 'CROSS-rsdp-128-balanced' is not FIPS-approved.
+#   In FIPS mode you must use one of [..ML-DSA-44, ML-DSA-65, ...].</code></pre>
+
+<h2>Auditing what was used</h2>
+
+<p>FIPS-mode entry is recorded in:</p>
+<ul>
+<li>The evidence DB <code>log</code> table (<code>[FIPS] mode enabled (self-test passed=True)</code>)</li>
+<li>The chain-of-custody record's events (via the case lifecycle hook)</li>
+<li>Case metadata (<code>fips_mode</code> key — settable via the runner)</li>
+</ul>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

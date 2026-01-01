@@ -1,0 +1,91 @@
+# CISA Known Exploited Vulnerabilities — high-signal subset for endpoint scans.
+#
+# Selected entries actively exploited against developer/endpoint software
+# (browsers, runtime, dev tools). Match on installed software inventory:
+# product name (case-insensitive substring) + affected version range.
+#
+# For the full feed pull
+#   https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json
+# at `digger update kev` time; this file is the bundled offline fallback.
+
+entries:
+  - cve: CVE-2024-3400
+    product: "GlobalProtect"
+    vendor: "Palo Alto"
+    summary: "PAN-OS GlobalProtect command-injection (CVSS 10.0)"
+  - cve: CVE-2023-4863
+    product: "libwebp"
+    vendor: "Google"
+    summary: "Heap buffer overflow in WebP image processing"
+  - cve: CVE-2023-44487
+    product: "HTTP/2"
+    vendor: "*"
+    summary: "HTTP/2 rapid-reset DoS"
+  - cve: CVE-2023-38831
+    product: "WinRAR"
+    vendor: "RARLAB"
+    summary: "WinRAR archive spoofing; deployed by APT28/Sandworm"
+  - cve: CVE-2024-23222
+    product: "Safari"
+    vendor: "Apple"
+    summary: "WebKit type confusion exploited in the wild"
+  - cve: CVE-2024-21412
+    product: "SmartScreen"
+    vendor: "Microsoft"
+    summary: "Internet Shortcut SmartScreen bypass (DarkGate)"
+  - cve: CVE-2025-0411
+    product: "7-Zip"
+    vendor: "Igor Pavlov"
+    summary: "7-Zip MotW propagation bypass"
+  - cve: CVE-2024-49138
+    product: "Windows"
+    vendor: "Microsoft"
+    summary: "CLFS driver elevation of privilege (CISA KEV Dec 2024)"
+  - cve: CVE-2025-49113
+    product: "Roundcube"
+    vendor: "Roundcube"
+    summary: "Roundcube RCE (May 2025)"
+  - cve: CVE-2025-29927
+    product: "Next.js"
+    vendor: "Vercel"
+    summary: "Next.js middleware auth bypass"
+  - cve: CVE-2024-38112
+    product: "MSHTML"
+    vendor: "Microsoft"
+    summary: "Windows MSHTML platform spoofing (Void Banshee)"
+  - cve: CVE-2023-46805
+    product: "Ivanti Connect Secure"
+    vendor: "Ivanti"
+    summary: "Ivanti ICS auth bypass + RCE chain"
+  - cve: CVE-2024-21887
+    product: "Ivanti Connect Secure"
+    vendor: "Ivanti"
+    summary: "Ivanti ICS command injection (chained with 46805)"
+  - cve: CVE-2021-44228
+    product: "log4j"
+    vendor: "Apache"
+    summary: "Log4Shell — JNDI RCE in log4j 2.x"
+  - cve: CVE-2023-22518
+    product: "Confluence"
+    vendor: "Atlassian"
+    summary: "Improper authorization in Confluence Data Center"
+  - cve: CVE-2024-1709
+    product: "ConnectWise ScreenConnect"
+    vendor: "ConnectWise"
+    summary: "SlashAndGrab auth bypass (CVSS 10.0)"
+  - cve: CVE-2024-27198
+    product: "TeamCity"
+    vendor: "JetBrains"
+    summary: "TeamCity auth bypass"
+  - cve: CVE-2023-23397
+    product: "Outlook"
+    vendor: "Microsoft"
+    summary: "Outlook NTLM relay (APT28)"
+  - cve: CVE-2024-49039
+    product: "Windows"
+    vendor: "Microsoft"
+    summary: "Task Scheduler privilege escalation"
+  - cve: CVE-2024-30051
+    product: "DWM Core Library"
+    vendor: "Microsoft"
+    summary: "DWM heap-based EoP (QakBot)"

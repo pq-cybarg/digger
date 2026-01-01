@@ -1,0 +1,53 @@
+# Virtualenvs / build
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.coverage
+htmlcov/
+
+# Editor / OS noise
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local case directories (evidence DBs are user data, not source)
+/tmp/
+out/
+cases/
+*.case/
+*.digger
+*.digger.json
+
+# Intel-feed local cache + LOKI signature-base mirror lives outside the
+# repo by default ($DIGGER_INTEL_DIR, $DIGGER_SIGNATURE_BASE_DIR); don't
+# ship any accidental in-tree caches.
+intel-cache/
+signature-base/
+
+# PQC secret keys MUST never be committed
+*.sk
+*.secret
+case_signature.json
+
+# Sample / smoke outputs
+sigma-out/
+out/sigma/
+sample_report.html

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Case diff — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="diff">
+<main>
+
+<h1>Case diff
+  <span class="subtitle">What changed on this host since the last collection — surfaced as added, removed, modified artifacts and new/resolved findings.</span>
+</h1>
+
+<h2>Why this exists</h2>
+
+<p>The most common question in repeat-collection forensics is "what's
+<em>new</em> here since the baseline?" A point-in-time report doesn't
+answer it — you'd have to manually cross-reference two cases. digger
+answers it directly: collect twice, diff the two case directories,
+and get a structured report.</p>
+
+<p>Source: <code>digger/diff/comparator.py</code>.</p>
+
+<h2>Run it</h2>
+
+<pre><code># Collect on Monday
+digger collect --case-dir /var/lib/digger/cases/2026-06-08
+
+# Collect on Tuesday
+digger collect --case-dir /var/lib/digger/cases/2026-06-09
+
+# Diff
+digger diff --base /var/lib/digger/cases/2026-06-08 \
+            --new  /var/lib/digger/cases/2026-06-09 \
+            --out  /var/lib/digger/diffs/2026-06-09.html</code></pre>
+
+<p>Format options: <code>--format html</code> (default), <code>md</code>, <code>json</code>.</p>
+
+<h2>What you get back</h2>
+
+<table>
+<thead><tr><th>Category</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><strong>Artifacts added</strong></td>
+    <td>Present in the new case, not in the base. New process running. New LaunchAgent plist. New SSH key in authorized_keys. New npm dependency in a lockfile. <em>This is the high-signal category.</em></td></tr>
+<tr><td><strong>Artifacts removed</strong></td>
+    <td>Present in the base, gone in the new. A service stopped, a launchd plist deleted, a package uninstalled, an ssh key revoked.</td></tr>
+<tr><td><strong>Artifacts modified</strong></td>
+    <td>Same identity, different content. A persistence plist's <code>ProgramArguments</code> changed. A sudoers file edited. A package upgraded to a new version.</td></tr>
+<tr><td><strong>Findings new</strong></td>
+    <td>A detector fired in the new case that hadn't fired in the base. Worth attention.</td></tr>
+<tr><td><strong>Findings resolved</strong></td>
+    <td>A detector that had been firing on the base is silent on the new. Usually means the underlying state was fixed (or hidden).</td></tr>
+<tr><td><strong>Findings modified</strong></td>
+    <td>The same finding fires in both but with different evidence — e.g. severity escalated.</td></tr>
+<tr><td><strong>Findings persisted</strong></td>
+    <td>Unchanged between runs. Useful as a sanity check that ongoing issues are still being tracked.</td></tr>
+</tbody>
+</table>
+
+<h2>Identity matching</h2>
+
+<p>Two artifacts from different runs are "the same artifact" iff their
+collector-specific identity tuple matches. Volatile fields like
+<code>pid</code>, <code>ppid</code>, <code>create_time</code>, ephemeral
+<code>laddr</code> port, and uptime are excluded so that a re-spawned
+Chrome doesn't show up as a new process.</p>
+
+<table>
+<thead><tr><th>Collector</th><th>Identity fields</th></tr></thead>
+<tbody>
+<tr><td><code>processes</code></td><td><code>(name, exe, cmdline, username)</code></td></tr>
+<tr><td><code>network</code></td><td><code>(raddr, status, type)</code></td></tr>
+<tr><td><code>users</code></td><td><code>(user, uid, gid)</code></td></tr>
+<tr><td><code>ssh_keys</code></td><td><code>(path, name)</code></td></tr>
+<tr><td><code>macos.launchd</code></td><td><code>(path,)</code></td></tr>
+<tr><td><code>windows.registry_persistence</code></td><td><code>(hive, subkey)</code></td></tr>
+<tr><td><code>npm_packages</code></td><td><code>(project,)</code></td></tr>
+<tr><td><code>github_workflows</code></td><td><code>(path,)</code></td></tr>
+<tr><td>…</td><td>see <code>digger/diff/comparator.py:IDENTITY_FIELDS</code></td></tr>
+</tbody>
+</table>
+
+<h2>Per-collector diff modes</h2>
+
+<p>Some collectors emit high-churn output that drowns the diff. Each
+collector has a mode:</p>
+
+<dl class="kv">
+  <dt>track</dt>     <dd>Full per-row diff. Default.</dd>
+  <dt>summarize</dt> <dd>Just shows the artifact-count delta. Used for <code>recent_files</code>, <code>browsers</code>, <code>system</code>, <code>macos.quarantine</code>, <code>linux.auth_logs</code>, <code>linux.audit</code>.</dd>
+  <dt>ignore</dt>    <dd>Skipped entirely. Used for <code>windows.event_logs</code> and <code>macos.unified_logs</code> — these are always different by nature.</dd>
+</dl>
+
+<h2>Hunting workflow</h2>
+
+<p>The intended weekly hunting loop:</p>
+
+<pre><code>#!/usr/bin/env bash
+# /usr/local/bin/digger-hunt.sh
+set -euo pipefail
+
+HOST=$(hostname -s)
+ROOT=/var/lib/digger
+DATE=$(date -u +%Y-%m-%d)
+
+LATEST="$ROOT/cases/$HOST/$DATE"
+PREV=$(ls -1d "$ROOT/cases/$HOST"/* 2>/dev/null | tail -1)
+
+digger --no-banner collect --case-dir "$LATEST"
+digger --no-banner scan    --case-dir "$LATEST"
+
+if [[ -n "${PREV:-}" && "$PREV" != "$LATEST" ]]; then
+    digger --no-banner diff --base "$PREV" --new "$LATEST" \
+           --out "$ROOT/diffs/$HOST-$DATE.html"
+    # Anything to report? Pipe critical findings to alerting.
+    digger --no-banner diff --base "$PREV" --new "$LATEST" --format json \
+        | jq '.findings.new[] | select(.severity == "critical" or .severity == "high")'
+fi</code></pre>
+
+<h2>Same-host check</h2>
+
+<p>If the two case directories have different <code>host.node</code> or
+<code>host.machine</code>, the diff still runs but the report carries
+a warning at the top. Diffing across hosts is rarely meaningful —
+process names match, but the underlying baselines don't.</p>
+
+<h2>What the diff cannot tell you</h2>
+
+<ul>
+<li><strong>When</strong> a change happened, only that it happened between
+two collection points. Use auth logs / audit logs (which the diff
+deliberately summarizes rather than tracks) to narrow the window.</li>
+<li><strong>Why</strong> it happened. The diff is descriptive, not causal.</li>
+<li>Changes inside the contents of <em>collected-but-not-tracked</em>
+collectors (event logs, unified logs) — by design.</li>
+</ul>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

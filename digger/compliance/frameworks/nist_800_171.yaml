@@ -1,0 +1,115 @@
+id: NIST_SP_800_171_Rev3
+title: NIST SP 800-171 Rev. 3 — Protecting Controlled Unclassified Information in Non-Federal Systems
+version: "Rev 3"
+publisher: National Institute of Standards and Technology
+url: https://csrc.nist.gov/pubs/sp/800/171/r3/final
+description: |
+  Security requirements for protecting the confidentiality of Controlled
+  Unclassified Information (CUI) when residing in non-federal systems.
+  This catalog covers the 14 control families; digger evaluates endpoint-
+  observable requirements.
+
+controls:
+  - id: 3.1.1
+    title: Limit system access to authorized users
+    family: AC
+    severity_if_failed: high
+    checks:
+      - artifact_present: users
+
+  - id: 3.1.5
+    title: Employ the principle of least privilege
+    family: AC
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: env_hijack
+      - no_finding_with_detector: ssh_auth_keys
+
+  - id: 3.1.12
+    title: Monitor and control remote access sessions
+    family: AC
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: c2
+
+  - id: 3.3.1
+    title: Create and retain system audit logs
+    family: AU
+    severity_if_failed: high
+    checks:
+      - artifact_present: windows.event_logs
+      - artifact_present: linux.audit
+      - artifact_present: macos.unified_logs
+
+  - id: 3.3.5
+    title: Review and update logged events
+    family: AU
+    severity_if_failed: medium
+    checks:
+      - manual: true
+
+  - id: 3.4.1
+    title: Establish and maintain baseline configurations and inventories
+    family: CM
+    severity_if_failed: medium
+    checks:
+      - artifact_present: installed_software
+
+  - id: 3.4.6
+    title: Employ the principle of least functionality
+    family: CM
+    severity_if_failed: medium
+    checks:
+      - no_finding_with_detector: persistence_outlier
+
+  - id: 3.5.1
+    title: Identify users and authenticate them
+    family: IA
+    severity_if_failed: high
+    checks:
+      - artifact_present: users
+
+  - id: 3.6.2
+    title: Track, document, and report incidents
+    family: IR
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+
+  - id: 3.13.1
+    title: Monitor, control, and protect organizational communications
+    family: SC
+    severity_if_failed: high
+    checks:
+      - artifact_present: network
+
+  - id: 3.13.11
+    title: Use FIPS-validated cryptography
+    family: SC
+    severity_if_failed: high
+    checks:
+      - manual: true
+    references: ["NIST SP 800-171 §3.13.11", "FIPS 140-3"]
+
+  - id: 3.14.1
+    title: Identify, report, and correct system flaws
+    family: SI
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: supply_chain
+
+  - id: 3.14.2
+    title: Provide protection from malicious code
+    family: SI
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: yara
+      - no_finding_with_detector: shai_hulud
+
+  - id: 3.14.6
+    title: Monitor systems including inbound and outbound traffic
+    family: SI
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - artifact_present: network

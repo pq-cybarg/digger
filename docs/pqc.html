@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Post-quantum crypto — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="pqc">
+<main>
+
+<h1>Post-quantum crypto
+  <span class="subtitle">liboqs-backed. Every NIST PQC algorithm digger picks up at runtime — FIPS-finalized, Round 4, and the additional signature on-ramp.</span>
+</h1>
+
+<h2>Why PQC?</h2>
+
+<p>Classical signatures (RSA, ECDSA) become forgeable once a sufficiently
+large quantum computer exists. Evidence stores you sign today are expected
+to remain forensically valid for years; signing them with a post-quantum
+algorithm now means the signature is durable across that horizon
+(harvest-now-decrypt-later doesn't apply to signatures the way it does to
+KEM-encapsulated secrets, but durable non-repudiation does).</p>
+
+<p>digger uses post-quantum signatures for evidence-chain attestation and
+post-quantum KEM + AES-256-GCM hybrid encryption for case-bundle archival.</p>
+
+<h2>Backend</h2>
+
+<p>We delegate to <a href="https://openquantumsafe.org">liboqs</a> via the
+<code>oqs-python</code> binding. liboqs is the canonical reference
+implementation tracking every algorithm in the NIST PQC standardization
+process. Re-implementing PQC primitives is a footgun; we don't.</p>
+
+<p>The set of algorithms <em>actually</em> usable on your host is exactly
+whatever your installed liboqs build exposes:</p>
+
+<pre><code>$ digger pqc info --mode fips</code></pre>
+
+<p>or, in code:</p>
+
+<pre><code>from digger.crypto import available_kems, available_sigs
+print(available_sigs())   # list[str]
+print(available_kems())</code></pre>
+
+<h2>Algorithm coverage</h2>
+
+<h3>FIPS-finalized</h3>
+
+<p>The algorithms NIST has published as Federal Information Processing
+Standards. These are the only algorithms allowed under
+<a href="fips.html">FIPS mode</a>.</p>
+
+<table>
+<thead><tr><th>FIPS</th><th>Family</th><th>Algorithms</th></tr></thead>
+<tbody>
+<tr><td>203</td><td>Module-Lattice KEM (Kyber)</td><td>ML-KEM-512, ML-KEM-768, ML-KEM-1024</td></tr>
+<tr><td>204</td><td>Module-Lattice DSA (Dilithium)</td><td>ML-DSA-44, ML-DSA-65, ML-DSA-87</td></tr>
+<tr><td>205</td><td>Stateless Hash-Based DSA (SPHINCS+)</td><td>SLH-DSA-SHA2-{128,192,256}{s,f}, SLH-DSA-SHAKE-{128,192,256}{s,f}</td></tr>
+<tr><td>206 (draft)</td><td>FN-DSA (Falcon)</td><td>Falcon-512, Falcon-1024, Falcon-padded-{512,1024}</td></tr>
+</tbody>
+</table>
+
+<h3>NIST Round 4</h3>
+
+<p>Algorithms still under active review for additional KEM diversity.</p>
+
+<ul>
+<li><strong>HQC-128 / 192 / 256</strong> — code-based KEM, selected as the 5th KEM standard in 2025; FIPS draft pending.</li>
+<li><strong>BIKE-L1 / L3 / L5</strong> — quasi-cyclic code-based KEM.</li>
+<li><strong>Classic-McEliece-348864 .. 8192128</strong> — conservative code-based KEM with very large public keys.</li>
+</ul>
+
+<h3>Signature on-ramp</h3>
+
+<p>Round 1 of the additional-signature competition that NIST opened to
+diversify beyond lattice-based signatures. Names below track liboqs
+identifiers — digger autodetects whatever your build enables.</p>
+
+<p>Included in our tables (and matched against availability):
+CROSS (RSDP / RSDPG, balanced/fast/small variants),
+MAYO-1/2/3/5,
+OV / UOV (Is, Ip, III, V with pkc / pkc-skc),
+SNOVA (24_5_4, 37_17_2, …),
+HAWK-512 / 1024,
+FAEST (regular and EM variants),
+LESS,
+MiRitH,
+MQOM (gf31, gf251),
+PERK,
+QR-UOV,
+RYDE,
+SDitH (gf256, gf251),
+SQIsign-I / III / V.</p>
+
+<p>This is a moving target. Upgrade liboqs to pick up new ones — digger
+needs no code changes.</p>
+
+<h2>Signing the evidence chain</h2>
+
+<p>The signed payload is canonical bytes derived from the chain tip:
+the current artifact-table chain hash, the current finding-table chain hash,
+and the case_id. This binds the signature to a specific case state.</p>
+
+<pre><code>digger pqc sign --case-dir ./case-1 \
+       --algorithm ML-DSA-65 \
+       --key /secrets/digger.sk \
+       --note "investigator: analyst; engagement: q2-2026-ir"</code></pre>
+
+<dl class="kv">
+  <dt>--algorithm</dt><dd>Default <code>ML-DSA-65</code>. Anything in <code>available_sigs()</code>.</dd>
+  <dt>--key</dt><dd>Secret key file. Auto-generated (chmod 600) plus <code>.pub</code> if it doesn't exist.</dd>
+  <dt>--note</dt><dd>Free-form note baked into the signature bundle.</dd>
+</dl>
+
+<p>Output is <code>case_signature.json</code> in the case directory:</p>
+
+<pre><code>{
+  "algorithm": "ML-DSA-65",
+  "public_key_b64": "…",
+  "signature_b64": "…",
+  "message_sha256": "…",
+  "created": 1747780000.0,
+  "note": "investigator: analyst; engagement: q2-2026-ir",
+  "scheme": "NIST-PQC"
+}</code></pre>
+
+<p>To verify later:</p>
+
+<pre><code>digger pqc verify --case-dir ./case-1</code></pre>
+
+<p>Exit code 0 on success, 1 on failure.</p>
+
+<h2>Hybrid PQC-KEM + AES-256-GCM encryption</h2>
+
+<p>For archiving a case bundle to untrusted storage, use the hybrid encryption
+helpers in <code>digger/crypto/pqc.py</code>:</p>
+
+<pre><code>from digger.crypto import PQCBackend, hybrid_encrypt, hybrid_decrypt
+
+backend = PQCBackend(kem_alg="ML-KEM-768")
+pk, sk = backend.generate_kem_key()                # recipient keypair
+
+blob = hybrid_encrypt(b"&lt;evidence bytes&gt;", pk)    # → dict with KEM ciphertext + AES-GCM ciphertext
+plaintext = hybrid_decrypt(blob, sk)               # recovers original</code></pre>
+
+<p>The shared secret from the KEM is run through HKDF-SHA256 to derive a
+256-bit AES-GCM key with a per-message random nonce. Associated-data binding
+prevents cross-context replay.</p>
+
+<h2>FIPS-mode interaction</h2>
+
+<p>When FIPS mode is on, <code>PQCBackend.generate_signing_key()</code> and
+<code>generate_kem_key()</code> call <code>assert_approved_sig()</code> /
+<code>assert_approved_kem()</code> which raise <code>FIPSViolation</code> for
+non-finalized algorithms:</p>
+
+<pre><code>$ digger --fips-mode pqc sign --case-dir x --algorithm CROSS-rsdp-128-balanced ...
+digger.fips.mode.FIPSViolation: signature algorithm 'CROSS-rsdp-128-balanced' is not FIPS-approved.
+In FIPS mode you must use one of ['Falcon-1024', 'Falcon-512', 'Falcon-padded-1024',
+'Falcon-padded-512', 'ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87', 'SLH-DSA-SHA2-128f', ...]</code></pre>
+
+<p>When FIPS mode is off, every algorithm liboqs supports is fair game.</p>
+
+<h2>Notes on actual FIPS 140-3 compliance</h2>
+
+<blockquote class="warn">
+<strong>Important.</strong> This module is a <em>user-mode wrapper</em>.
+True FIPS 140-3 compliance also requires:
+<ul>
+<li>An OpenSSL FIPS provider loaded, or a CMVP-listed liboqs build</li>
+<li>OS-level FIPS mode enabled (kernel.fips_enabled=1 on Linux, FipsAlgorithmPolicy on Windows, corecrypto on macOS by default)</li>
+<li>Independent module validation</li>
+</ul>
+digger's <a href="fips.html">FIPS mode</a> enforces algorithm restrictions
+and runs known-answer tests, but does not by itself constitute a validated
+cryptographic module.
+</blockquote>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

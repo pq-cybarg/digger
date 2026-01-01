@@ -1,0 +1,224 @@
+# Signatures for offensive-security C2 frameworks.
+#
+# Each entry has:
+#   name              display name
+#   severity          finding severity if any matcher hits
+#   uri_patterns      regexes matched against URLs / strings (case-insensitive)
+#   proc_patterns     regexes matched against process command lines
+#   pipe_patterns     regexes matched against \\.\pipe\... references
+#                     (in cmdlines, open_files, or named-pipe collector)
+#   file_patterns     regexes matched against open-files paths
+#   port_hints        numeric port hints (informational only)
+#   tls_ja3           known JA3 hashes for default-config beacons
+#   notes             why these patterns
+#
+# Behavioral indicators; well-tuned operators bypass any single signature,
+# so the detector chains these with the broader network + lolbin + lateral
+# + memory signals. Live YARA from Neo23x0/signature-base supplements when
+# present.
+
+frameworks:
+
+  # ---- Cobalt Strike ---- #
+  - name: "Cobalt Strike"
+    severity: "critical"
+    uri_patterns:
+      - "(?:/__utm\\.gif|/ca|/dpixel|/pixel\\.gif|/load|/jquery-3\\.3\\.1\\.min\\.js|/cm)"
+      - "(?:beacon|stager64|stager32|/aaa9|/aab8|/aac7)"
+      - "/__utm\\.gif\\?utmac="
+      - "/submit\\.php\\?id="
+    proc_patterns:
+      - "powershell\\s+-nop\\s+-w\\s+hidden\\s+-EncodedCommand"
+      - "rundll32\\.exe\\s+\\S+,\\s*(StartW|DllRegisterServer|Shell32)"
+      - "regsvr32\\.exe\\s+/s\\s+/u\\s+/i:https?://"
+      - "wmic\\.exe\\s+process\\s+call\\s+create"
+    pipe_patterns:
+      - "\\\\\\\\\\.\\\\pipe\\\\(MSSE-\\d+-server|postex_\\d+|status_\\d+)"
+      - "\\\\\\\\\\.\\\\pipe\\\\msagent_[0-9a-f]{4,8}"
+      - "\\\\\\\\\\.\\\\pipe\\\\(?:wkssvc|interactive_\\d+)"
+    port_hints: [50050]
+    tls_ja3:
+      - "72a589da586844d7f0818ce684948eea"   # CS default Java JA3
+      - "a0e9f5d64349fb13191bc781f81f42e1"   # CS default agent JA3
+    notes: |
+      Cobalt Strike default Malleable profile + team-server port 50050.
+      Named pipes ``MSSE-*-server``, ``postex_*``, ``msagent_*``,
+      ``status_*`` are stock postex pipes. JA3 hashes come from the
+      bundled Java runtime; rotating the JKS changes them.
+
+  # ---- Sliver ---- #
+  - name: "Sliver"
+    severity: "critical"
+    uri_patterns:
+      - "(?:/api/v1/(?:c2|register|task)|/php/login\\.php\\?slv=)"
+      - "(?:\\.css\\?cb=[a-f0-9]{16}|/static/[a-f0-9]{12}\\.js)"
+      - "/sliver/(?:beacon|session|task)"
+    proc_patterns:
+      - "\\bsliver(?:-server|-client|_implant|\\b)"
+      - "/sliver(?:-darwin|-linux|-windows)\\.bin"
+    pipe_patterns:
+      - "\\\\\\\\\\.\\\\pipe\\\\sliver_[a-z0-9_]+"
+      - "\\\\\\\\\\.\\\\pipe\\\\namedpipe-(?:server|client)"
+    file_patterns:
+      - "~/\\.sliver/"
+      - "/etc/sliver/"
+    port_hints: [31337, 8888]
+    notes: |
+      Sliver default mtls/http ports + default URIs. Implant binaries
+      typically run from ~/Library/, /tmp/, or %TEMP%; combine with the
+      persistence_outlier detector and memory_anomaly RWX signal.
+
+  # ---- Mythic ---- #
+  - name: "Mythic"
+    severity: "critical"
+    uri_patterns:
+      - "/api/v1.[345]/c2profiles/?"
+      - "/api/v1.[345]/tasks/callback/[a-f0-9-]{8,}/"
+      - "/api/v1.[345]/(?:operations|payloads|callbacks)/"
+    proc_patterns:
+      - "\\b(?:apfell|apollo|athena|atlas|freyja|tetanus|poseidon|service_wrapper)\\b"
+      - "\\bmedusa\\.(?:py|exe|bin)"
+    port_hints: [80, 443, 7443]
+    notes: "Mythic agents (Apollo, Athena, Apfell, Tetanus, Poseidon, Atlas, Freyja, Medusa) and their default API paths."
+
+  # ---- Brute Ratel C4 ---- #
+  - name: "Brute Ratel C4"
+    severity: "critical"
+    uri_patterns:
+      - "/(?:api/v1/jobs|jobs)\\b"
+      - "/(?:check|stage|task)\\.png"
+    proc_patterns:
+      - "\\bbadger(?:\\.exe|_x64|_x86)?\\b|\\bratel\\b|brc4"
+    pipe_patterns:
+      - "\\\\\\\\\\.\\\\pipe\\\\bratel"
+    notes: "Brute Ratel C4 default badger names + job paths + ``bratel`` named pipe."
+
+  # ---- Havoc ---- #
+  - name: "Havoc"
+    severity: "critical"
+    uri_patterns:
+      - "/havoc/?(?:\\?id=)?"
+      - "/(?:demon|x[0-9a-f]{4})\\.(?:png|gif|js|css)\\?h="
+    proc_patterns:
+      - "\\bhavoc\\b|demon(?:\\.exe|\\.bin|\\.elf|_x64)|\\bteamserver\\.go\\b"
+    pipe_patterns:
+      - "\\\\\\\\\\.\\\\pipe\\\\(?:havoc_|demon_)[0-9a-f]+"
+    port_hints: [40056]
+    notes: "Havoc framework default port + Demon agent names + havoc_/demon_ named pipes."
+
+  # ---- Nighthawk ---- #
+  - name: "Nighthawk (MDSec)"
+    severity: "critical"
+    uri_patterns:
+      - "/[a-z]{4,8}/(?:beacon|task|callback)\\?[a-z]+=[a-f0-9]{8,}"
+    proc_patterns:
+      - "\\bnighthawk\\b|nh_(?:beacon|implant|cradle)"
+    pipe_patterns:
+      - "\\\\\\\\\\.\\\\pipe\\\\nh_[0-9a-f]+"
+    notes: "MDSec Nighthawk commercial C2 — close cousin of Cobalt Strike, similar URI/pipe patterns."
+
+  # ---- Merlin ---- #
+  - name: "Merlin"
+    severity: "critical"
+    uri_patterns:
+      - "/\\?(?:id|guid)=[0-9a-f-]{36}"
+    proc_patterns:
+      - "\\bmerlin(?:agent|server|cli)\\b|\\bmerlin_agent\\b"
+    notes: "Merlin Go-based C2 (Russel Van Tuyl) — HTTPS/2 with default GUID-only query string and merlin* binaries."
+
+  # ---- Covenant ---- #
+  - name: "Covenant"
+    severity: "high"
+    uri_patterns:
+      - "/(?:en-us|api)/(?:home|login|jquery)(?:\\.js|\\.html)?"
+      - "/grunt(?:_[a-f0-9]+)?\\.exe"
+    proc_patterns:
+      - "\\bGruntHTTP\\b|\\bgrunt\\.exe\\b|\\bCovenant\\.exe\\b"
+    notes: "Covenant ASP.NET C2 with Grunt agents."
+
+  # ---- Empire / Starkiller / Empire-Reloaded ---- #
+  - name: "Empire / Starkiller"
+    severity: "high"
+    uri_patterns:
+      - "/admin/get\\.php|/news\\.php|/login/process\\.php"
+      - "/(?:api|admin)/.*?session\\b"
+    proc_patterns:
+      - "powershell\\.exe\\s+.*\\b-Command\\b\\s+\\$WebClient"
+      - "\\bempire\\b|\\bstarkiller\\b"
+    notes: "Empire/Starkiller stager URIs + PS WebClient pattern."
+
+  # ---- Metasploit Meterpreter ---- #
+  - name: "Metasploit Meterpreter"
+    severity: "critical"
+    uri_patterns:
+      - "/[a-zA-Z0-9]{4,5}/?\\?(?:[a-z]=[a-zA-Z0-9_-]+&?){1,3}\\b"
+    proc_patterns:
+      - "\\bmsfconsole\\b|\\bmsfvenom\\b|\\bmsfd\\b"
+      - "\\bmetsrv\\.(?:dll|x64\\.dll|x86\\.dll)"
+    pipe_patterns:
+      - "\\\\\\\\\\.\\\\pipe\\\\(?:msf-pipe|meterpreter_)\\S*"
+    port_hints: [4444, 8443]
+    notes: "msfconsole/msfvenom + default reverse_https handler port + meterpreter URI shape + metsrv.* DLLs."
+
+  # ---- Pupy ---- #
+  - name: "Pupy"
+    severity: "high"
+    proc_patterns:
+      - "pupysh|pupyclient|pupygen"
+    notes: "Pupy operator/client tooling."
+
+  # ---- Posh-C2 ---- #
+  - name: "Posh-C2"
+    severity: "high"
+    uri_patterns:
+      - "/(?:images|cms|admin|config)/.*?\\.(?:php|asp|jsp)\\?id=[a-f0-9]{8,}"
+    proc_patterns:
+      - "powershell.*Invoke-Expression.*\\$global:url"
+      - "\\bPosh-C2\\b|\\bposhc2\\b"
+    notes: "Posh-C2 implant URIs + Invoke-Expression staging."
+
+  # ---- RAT families ---- #
+  - name: "AsyncRAT / DcRat / VenomRAT family"
+    severity: "high"
+    proc_patterns:
+      - "AsyncClient\\.exe|VenomRAT|DcRat|RevengeRAT|NjRat|QuasarRAT"
+      - "\\bAsyncRAT\\b|\\bDcRAT\\b|\\bquasar\\.exe\\b"
+    notes: "Common .NET RAT family executable names (AsyncRAT lineage)."
+
+  - name: "Remcos / NanoCore / Lokibot family"
+    severity: "high"
+    proc_patterns:
+      - "\\bRemcos(?:\\.exe)?\\b|\\bNanoCore\\b|\\bLokiBot\\b"
+    notes: "Commodity RAT families — primarily Windows."
+
+  # ---- Process-injection landing-pad detection ---- #
+  # Processes that are commonly chosen as injection targets. The signature is
+  # not the process itself (these are legitimate Windows components) but
+  # rather "this process has an outbound network connection that it should
+  # not have." The detector uses these names with the network artifacts.
+  - name: "Process-injection landing pad (Windows host process with outbound C2)"
+    severity: "high"
+    injection_target_names:
+      - "svchost.exe"
+      - "dllhost.exe"
+      - "explorer.exe"
+      - "spoolsv.exe"
+      - "rundll32.exe"
+      - "msbuild.exe"
+      - "InstallUtil.exe"
+      - "regsvr32.exe"
+      - "mshta.exe"
+      - "wmic.exe"
+    notes: |
+      These Windows host processes have legitimate reasons to exist but
+      should rarely make raw outbound TCP/443 to non-Microsoft IPs. The
+      detector flags any of these names connecting to a non-Microsoft
+      RFC1918/internet destination.
+
+  # ---- Crypto-miner C2 fallbacks (Decepticon-relevant if pivoting to monetize) ---- #
+  - name: "XMRig / cryptominer family"
+    severity: "high"
+    proc_patterns:
+      - "\\bxmrig\\b|\\bminerd\\b|\\bcpuminer\\b|\\bcgminer\\b|nbminer"
+    port_hints: [3333, 4444, 5555, 7777, 8888, 14444]
+    notes: "Generic CPU/GPU miner names — not classic C2 but a common post-exploit goal."

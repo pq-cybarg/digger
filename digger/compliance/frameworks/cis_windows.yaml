@@ -1,0 +1,41 @@
+id: CIS_Microsoft_Windows_11
+title: CIS Microsoft Windows 11 Enterprise Benchmark
+version: "v3.0.0"
+publisher: Center for Internet Security
+url: https://www.cisecurity.org/benchmark/microsoft_windows_desktop
+description: Subset of CIS Windows 11 Enterprise controls.
+
+controls:
+  - id: "2.3.1"
+    title: Ensure Account lockout policies are configured
+    family: Account Policies
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: "9.2"
+    title: Ensure Windows Defender Firewall is enabled
+    family: Windows Defender Firewall
+    severity_if_failed: high
+    checks:
+      - artifact_present: windows.firewall
+  - id: "17.x"
+    title: Ensure Audit policies are configured to capture key events
+    family: Advanced Audit Policy
+    severity_if_failed: high
+    checks:
+      - artifact_present: windows.event_logs
+  - id: "18.9.x"
+    title: Ensure Windows Defender Antivirus is enabled with current definitions
+    family: Defender
+    severity_if_failed: high
+    checks:
+      - artifact_present: windows.defender
+  - id: "18.10.x"
+    title: Ensure PowerShell logging (Script Block, Module, Transcription) is enabled
+    family: PowerShell
+    severity_if_failed: high
+    checks:
+      - data_contains:
+          collector: windows.event_logs
+          subject_glob: "channel:Microsoft-Windows-PowerShell/Operational"
+          field: raw
+          pattern: "."

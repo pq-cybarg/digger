@@ -1,0 +1,383 @@
+id: SOC2_TSC_2017
+title: SOC 2 — Trust Services Criteria (2017, as revised)
+version: "2017 (with points-of-focus from the 2022 SSAE 21 guidance)"
+publisher: AICPA Assurance Services Executive Committee
+url: https://www.aicpa-cima.com/topic/audit-assurance/audit-and-assurance-greater-than-soc-2
+description: |
+  SOC 2 reports attest to the suitability of a service organization's
+  controls against the AICPA Trust Services Criteria. Security (the
+  Common Criteria, CC1-CC9) is always in scope. The Additional Criteria
+  — Availability (A1), Confidentiality (C1), Processing Integrity (PI1),
+  and Privacy (P1-P8) — are included when the engagement scope demands.
+
+  This catalog covers the endpoint-observable subset of every TSC family
+  so that digger can be part of a defensible Type I or Type II evidence
+  collection. Controls that depend on governance, policies, or HR
+  processes are flagged `manual` for analyst sign-off.
+
+controls:
+  # ---- CC1 — Control Environment ---- #
+  - id: CC1.1
+    title: COSO Principle 1 — Demonstrates commitment to integrity and ethical values
+    family: CC1
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: CC1.2
+    title: COSO Principle 2 — Board exercises oversight responsibility
+    family: CC1
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: CC1.3
+    title: COSO Principle 3 — Establishes structure, authority, and responsibility
+    family: CC1
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: CC1.4
+    title: COSO Principle 4 — Demonstrates commitment to competence
+    family: CC1
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: CC1.5
+    title: COSO Principle 5 — Holds individuals accountable for internal control responsibilities
+    family: CC1
+    severity_if_failed: medium
+    checks: [{manual: true}]
+
+  # ---- CC2 — Communication and Information ---- #
+  - id: CC2.1
+    title: Obtains or generates relevant, quality information to support internal control
+    family: CC2
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: CC2.2
+    title: Communicates information internally — including control objectives and responsibilities
+    family: CC2
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: CC2.3
+    title: Communicates with external parties regarding internal control matters
+    family: CC2
+    severity_if_failed: medium
+    checks: [{manual: true}]
+
+  # ---- CC3 — Risk Assessment ---- #
+  - id: CC3.1
+    title: Specifies objectives with sufficient clarity to enable identification of risk
+    family: CC3
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: CC3.2
+    title: Identifies risks to the achievement of its objectives
+    family: CC3
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: supply_chain
+      - no_finding_with_detector: shai_hulud
+  - id: CC3.3
+    title: Considers the potential for fraud in assessing risks
+    family: CC3
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: CC3.4
+    title: Identifies and assesses changes that could significantly impact internal control
+    family: CC3
+    severity_if_failed: medium
+    checks: [{manual: true}]
+
+  # ---- CC4 — Monitoring Activities ---- #
+  - id: CC4.1
+    title: Selects, develops, and performs ongoing and/or separate evaluations
+    family: CC4
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - artifact_present: network
+  - id: CC4.2
+    title: Evaluates and communicates internal control deficiencies in a timely manner
+    family: CC4
+    severity_if_failed: high
+    checks: [{manual: true}]
+
+  # ---- CC5 — Control Activities ---- #
+  - id: CC5.1
+    title: Selects and develops control activities that mitigate risks
+    family: CC5
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: CC5.2
+    title: Selects and develops general controls over technology
+    family: CC5
+    severity_if_failed: high
+    checks:
+      - artifact_present: installed_software
+      - no_finding_with_detector: persistence_outlier
+  - id: CC5.3
+    title: Deploys control activities through policies and procedures
+    family: CC5
+    severity_if_failed: medium
+    checks: [{manual: true}]
+
+  # ---- CC6 — Logical and Physical Access Controls ---- #
+  - id: CC6.1
+    title: Logical access security limits information assets to authorized users
+    family: CC6
+    severity_if_failed: high
+    checks:
+      - artifact_present: users
+      - no_finding_with_detector: ssh_auth_keys
+  - id: CC6.2
+    title: Registers and authorizes internal and external users before granting credentials
+    family: CC6
+    severity_if_failed: high
+    checks:
+      - artifact_present: ssh_keys
+  - id: CC6.3
+    title: Authorizes, modifies, and removes access based on roles, responsibilities, and changes
+    family: CC6
+    severity_if_failed: high
+    checks:
+      - artifact_present: users
+  - id: CC6.4
+    title: Restricts physical access to facilities and protected information assets
+    family: CC6
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: CC6.5
+    title: Discontinues logical and physical protections over disposed assets
+    family: CC6
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: CC6.6
+    title: Implements logical access security measures to protect against external threats
+    family: CC6
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: c2
+      - no_finding_with_detector: threat_actor
+  - id: CC6.7
+    title: Restricts transmission, movement, and removal of information to authorized users
+    family: CC6
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: env_hijack
+  - id: CC6.8
+    title: Controls to prevent or detect introduction of unauthorized or malicious software
+    family: CC6
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: yara
+      - no_finding_with_detector: shai_hulud
+      - no_finding_with_detector: loki
+
+  # ---- CC7 — System Operations ---- #
+  - id: CC7.1
+    title: Detection and monitoring procedures for new vulnerabilities and changes
+    family: CC7
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: supply_chain
+  - id: CC7.2
+    title: Anomalies are monitored, investigated, and acted upon
+    family: CC7
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - artifact_present: network
+      - no_finding_above: high
+  - id: CC7.3
+    title: Identified security events are evaluated to determine whether they could result in failure
+    family: CC7
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: CC7.4
+    title: Responds to identified security incidents by executing a defined incident response program
+    family: CC7
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: CC7.5
+    title: Identifies, develops, and implements activities to recover from identified security incidents
+    family: CC7
+    severity_if_failed: high
+    checks: [{manual: true}]
+
+  # ---- CC8 — Change Management ---- #
+  - id: CC8.1
+    title: Authorizes, designs, develops, configures, documents, tests, approves, and implements changes
+    family: CC8
+    severity_if_failed: high
+    checks: [{manual: true}]
+
+  # ---- CC9 — Risk Mitigation ---- #
+  - id: CC9.1
+    title: Identifies, selects, and develops risk mitigation activities for risks from disruptions
+    family: CC9
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: CC9.2
+    title: Assesses and manages risks associated with vendors and business partners
+    family: CC9
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: supply_chain
+      - no_finding_with_detector: shai_hulud
+
+  # ---- A1 — Availability (Additional Criteria) ---- #
+  - id: A1.1
+    title: Maintains, monitors, and evaluates current processing capacity and use
+    family: A1
+    severity_if_failed: medium
+    checks:
+      - artifact_present: system
+  - id: A1.2
+    title: Authorizes, designs, develops, implements, operates, monitors, and approves environmental protections
+    family: A1
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: A1.3
+    title: Tests recovery plan procedures supporting system recovery
+    family: A1
+    severity_if_failed: high
+    checks: [{manual: true}]
+
+  # ---- C1 — Confidentiality ---- #
+  - id: C1.1
+    title: Identifies and maintains confidential information to meet objectives
+    family: C1
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: C1.2
+    title: Disposes of confidential information to meet objectives
+    family: C1
+    severity_if_failed: medium
+    checks: [{manual: true}]
+
+  # ---- PI1 — Processing Integrity ---- #
+  - id: PI1.1
+    title: System processing is complete, valid, accurate, timely, and authorized
+    family: PI1
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: PI1.2
+    title: Inputs are complete, accurate, valid, and authorized
+    family: PI1
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: PI1.3
+    title: System processing produces complete, accurate, timely, authorized output
+    family: PI1
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: PI1.4
+    title: Outputs are delivered to authorized recipients in accordance with specifications
+    family: PI1
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: PI1.5
+    title: Stores inputs, items in processing, and outputs completely, accurately, timely
+    family: PI1
+    severity_if_failed: medium
+    checks: [{manual: true}]
+
+  # ---- P1-P8 — Privacy (Additional Criteria) ---- #
+  - id: P1.1
+    title: Notice and Communication of Objectives Related to Privacy
+    family: P1
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: P2.1
+    title: Choice and Consent — Communicates choices to data subjects
+    family: P2
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: P3.1
+    title: Collection — Limits collection to that which is necessary
+    family: P3
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: P3.2
+    title: Collection — Obtains explicit consent for sensitive personal information
+    family: P3
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: P4.1
+    title: Use, Retention, and Disposal — Limits use of personal information
+    family: P4
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: P4.2
+    title: Use, Retention, and Disposal — Retains personal information consistent with objectives
+    family: P4
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: P4.3
+    title: Use, Retention, and Disposal — Securely disposes of personal information
+    family: P4
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: P5.1
+    title: Access — Authenticates data subjects and provides access to their personal information
+    family: P5
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: P5.2
+    title: Access — Corrects and updates personal information
+    family: P5
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: P6.1
+    title: Disclosure and Notification — Communicates disclosure practices
+    family: P6
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: P6.2
+    title: Disclosure and Notification — Discloses personal information only as permitted
+    family: P6
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: P6.3
+    title: Disclosure and Notification — Notifies data subjects of breaches
+    family: P6
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: P6.4
+    title: Disclosure and Notification — Identifies, addresses, and reports privacy incidents
+    family: P6
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: P7.1
+    title: Quality — Maintains accurate, complete, and relevant personal information
+    family: P7
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: P8.1
+    title: Monitoring and Enforcement — Implements a process to monitor compliance with privacy commitments
+    family: P8
+    severity_if_failed: medium
+    checks: [{manual: true}]
+
+mapping_to_other_frameworks:
+  NIST_SP_800_53_Rev5:
+    CC6.1: ["AC-2", "AC-3", "AC-6"]
+    CC6.2: ["IA-2", "IA-4", "IA-5"]
+    CC6.3: ["AC-2", "AC-5"]
+    CC6.6: ["SC-7", "SI-4"]
+    CC6.7: ["SC-8", "AC-4"]
+    CC6.8: ["SI-3", "SI-7"]
+    CC7.1: ["RA-5"]
+    CC7.2: ["SI-4", "AU-6"]
+    CC7.3: ["IR-4"]
+    CC7.4: ["IR-4", "IR-5"]
+    CC8.1: ["CM-3", "CM-4"]
+    CC9.2: ["SA-12"]
+  ISO_IEC_27001_2022:
+    CC6.1: ["A.5.16", "A.8.2", "A.8.3"]
+    CC6.6: ["A.8.7", "A.8.16"]
+    CC6.8: ["A.8.7"]
+    CC7.1: ["A.8.8"]
+    CC7.2: ["A.8.16"]
+    CC7.4: ["A.5.24", "A.5.26"]
+  PCI_DSS_4_0:
+    CC6.1: ["8.2"]
+    CC6.8: ["11.5.1"]
+    CC7.2: ["10.6"]
+    CC7.4: ["12.10.4"]

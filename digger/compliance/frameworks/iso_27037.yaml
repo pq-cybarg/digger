@@ -1,0 +1,63 @@
+id: ISO_IEC_27037_2012
+title: ISO/IEC 27037:2012 — Identification, Collection, Acquisition, and Preservation of Digital Evidence
+version: "2012"
+publisher: International Organization for Standardization
+url: https://www.iso.org/standard/44381.html
+description: |
+  Guidelines for handling potential digital evidence to maintain its
+  integrity for legal, regulatory, or internal investigative use.
+  These controls are evaluated against digger's chain-of-custody record
+  and the evidence-store hash chain.
+
+controls:
+  - id: ISO27037-6.1
+    title: Documentation of digital evidence handling (chain of custody)
+    family: documentation
+    severity_if_failed: high
+    checks:
+      - artifact_present: system
+    references: ["ISO/IEC 27037:2012 §6.1"]
+  - id: ISO27037-6.2
+    title: Time records — UTC and synchronized time source
+    family: documentation
+    severity_if_failed: medium
+    checks:
+      - artifact_present: system
+  - id: ISO27037-6.3
+    title: Auditability — every action on the evidence is logged
+    family: process
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: ISO27037-6.4
+    title: Repeatability — actions must produce the same result if repeated
+    family: process
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: ISO27037-6.5
+    title: Justifiability — actions are documented as forensically defensible
+    family: process
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: ISO27037-7.1
+    title: Identification of potential digital evidence
+    family: identification
+    severity_if_failed: medium
+    checks:
+      - artifact_present: processes
+      - artifact_present: network
+  - id: ISO27037-7.2
+    title: Collection of digital evidence
+    family: collection
+    severity_if_failed: high
+    checks:
+      - artifact_count_min: {processes: 10}
+  - id: ISO27037-7.3
+    title: Acquisition — produce a verifiable image/copy of the source
+    family: acquisition
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: ISO27037-7.4
+    title: Preservation — chain of custody and integrity verification (hash)
+    family: preservation
+    severity_if_failed: high
+    checks: [{manual: true}]

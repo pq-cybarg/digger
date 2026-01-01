@@ -1,0 +1,17 @@
+# digger IOC seed list — replace with your own feeds (one indicator per line).
+# Empty / comment lines are ignored. Format autodetected:
+#   - SHA-256 hash         (64 hex chars)
+#   - MD5 hash             (32 hex chars)
+#   - IPv4 address         (a.b.c.d)
+#   - domain               (something.tld, no scheme/slash)
+#   - URL                  (https://...)
+#   - path                 (contains / or \)
+#
+# Replace this file with your own feeds, or point digger at additional
+# directories via the IocDetector(extra_dirs=...) constructor.
+
+# Example (commented out — uncomment to use):
+# 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+# 1.2.3.4
+# evil.example.com
+# https://evil.example.com/loader.js

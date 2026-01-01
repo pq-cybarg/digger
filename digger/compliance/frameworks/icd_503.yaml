@@ -1,0 +1,65 @@
+id: ICD_503
+title: ODNI ICD 503 — IC Information Technology Systems Security Risk Management
+version: "September 2015 (as amended)"
+publisher: Office of the Director of National Intelligence (ODNI)
+url: https://www.dni.gov/files/documents/ICD/ICD%20503.pdf
+description: |
+  Intelligence Community Directive 503 establishes IC information
+  system risk management policy aligned with NIST SP 800-37 / 800-53
+  with IC-specific overlays. digger evaluates endpoint-observable
+  components of the IC risk-management baseline.
+
+controls:
+  - id: ICD503-AC-1
+    title: Access control policy and procedures
+    family: AC
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: ICD503-AU-2
+    title: Audit events (IC overlay)
+    family: AU
+    severity_if_failed: high
+    checks:
+      - artifact_present: windows.event_logs
+      - artifact_present: linux.audit
+      - artifact_present: macos.unified_logs
+  - id: ICD503-CA-7
+    title: Continuous monitoring
+    family: CA
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - artifact_present: network
+  - id: ICD503-IR-4
+    title: Incident handling
+    family: IR
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: ICD503-RA-5
+    title: Vulnerability scanning
+    family: RA
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: supply_chain
+  - id: ICD503-SC-13
+    title: Cryptographic protection (IC overlay)
+    family: SC
+    severity_if_failed: high
+    checks: [{manual: true}]
+    references: ["ICD 503", "CNSSI 1253", "FIPS 140-3"]
+  - id: ICD503-SI-4
+    title: System monitoring (IC overlay)
+    family: SI
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - artifact_present: network
+
+mapping_to_other_frameworks:
+  NIST_SP_800_53_Rev5:
+    ICD503-AU-2: ["AU-2"]
+    ICD503-CA-7: ["CA-7"]
+    ICD503-IR-4: ["IR-4"]
+    ICD503-RA-5: ["RA-5"]
+    ICD503-SC-13: ["SC-13"]
+    ICD503-SI-4: ["SI-4"]

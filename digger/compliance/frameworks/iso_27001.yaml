@@ -1,0 +1,80 @@
+id: ISO_IEC_27001_2022
+title: ISO/IEC 27001:2022 — Information Security Management Systems
+version: "2022"
+publisher: International Organization for Standardization
+url: https://www.iso.org/standard/27001
+description: |
+  Annex A controls (93 total, organized into 4 themes: Organizational,
+  People, Physical, Technological). This subset focuses on technological
+  controls that map to endpoint-observable evidence.
+
+controls:
+  - id: A.5.16
+    title: Identity management
+    family: Organizational
+    severity_if_failed: high
+    checks:
+      - artifact_present: users
+  - id: A.5.17
+    title: Authentication information
+    family: Organizational
+    severity_if_failed: high
+    checks:
+      - artifact_present: ssh_keys
+  - id: A.5.24
+    title: Information security incident management planning and preparation
+    family: Organizational
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: A.8.2
+    title: Privileged access rights
+    family: Technological
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: env_hijack
+      - no_finding_with_detector: ssh_auth_keys
+  - id: A.8.5
+    title: Secure authentication
+    family: Technological
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: A.8.7
+    title: Protection against malware
+    family: Technological
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: yara
+      - no_finding_with_detector: c2
+      - no_finding_with_detector: shai_hulud
+  - id: A.8.8
+    title: Management of technical vulnerabilities
+    family: Technological
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: supply_chain
+  - id: A.8.15
+    title: Logging
+    family: Technological
+    severity_if_failed: high
+    checks:
+      - artifact_present: windows.event_logs
+      - artifact_present: linux.audit
+      - artifact_present: macos.unified_logs
+  - id: A.8.16
+    title: Monitoring activities
+    family: Technological
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - artifact_present: network
+  - id: A.8.24
+    title: Use of cryptography
+    family: Technological
+    severity_if_failed: high
+    checks: [{manual: true}]
+    references: ["ISO/IEC 27001:2022 A.8.24", "FIPS 140-3"]
+  - id: A.8.28
+    title: Secure coding
+    family: Technological
+    severity_if_failed: medium
+    checks: [{manual: true}]

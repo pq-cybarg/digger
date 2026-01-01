@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Extending digger — docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="extending">
+<main>
+
+<h1>Extending digger
+  <span class="subtitle">Write a new collector, detector, framework, or intel feed.</span>
+</h1>
+
+<h2>A new collector</h2>
+
+<p>Subclass <code>Collector</code>, set the four metadata fields, yield
+artifacts from <code>collect()</code>, and register the class.</p>
+
+<pre><code>--- digger/collectors/macos/my_collector.py ---
+
+from typing import Iterable
+from digger.core.collector import Collector
+from digger.core.evidence import Artifact
+from digger.core.platform import OS
+
+
+class SafariWebsiteDataCollector(Collector):
+    name = "macos.safari_website_data"
+    category = "browser"
+    supported_os = (OS.MACOS,)
+    requires_admin = False
+    description = "Safari WebKit website data plist."
+
+    def collect(self) -> Iterable[Artifact]:
+        from pathlib import Path
+        p = Path.home() / "Library/Safari/WebsiteData.plist"
+        if not p.exists():
+            return
+        try:
+            data = p.read_bytes()
+        except (PermissionError, OSError):
+            return
+        yield self.make(
+            subject=str(p),
+            path=str(p),
+            size=len(data),
+        )</code></pre>
+
+<p>Register in <code>digger/collectors/__init__.py</code> in the appropriate
+OS-specific list:</p>
+
+<pre><code>def _macos() -> list[Collector]:
+    ...
+    from digger.collectors.macos.my_collector import SafariWebsiteDataCollector
+    return [
+        ...,
+        SafariWebsiteDataCollector(),
+    ]</code></pre>
+
+<blockquote class="note">
+<strong>Graceful degradation.</strong> A collector that can't read what it
+needs should yield nothing and return — never raise. Wrap risky calls in
+<code>try/except (PermissionError, OSError, subprocess.SubprocessError)</code>.
+Check <code>shutil.which()</code> before shelling out.
+</blockquote>
+
+<h2>A new detector</h2>
+
+<pre><code>--- digger/detectors/my_detector.py ---
+
+from typing import Iterable
+from digger.core.evidence import EvidenceStore, Finding
+from digger.detectors.base import Detector
+
+
+class CrontabCommentDetector(Detector):
+    name = "crontab_comment_anomaly"
+    description = "Crontab entries with unusual commenting patterns."
+
+    def detect(self, store: EvidenceStore) -> Iterable[Finding]:
+        for art in store.iter_artifacts(collector="linux.cron"):
+            contents = art["data"].get("contents") or ""
+            if "###" in contents or "@@" in contents:
+                yield Finding(
+                    detector=self.name,
+                    severity="low",
+                    title=f"Unusual comment style in {art['subject']}",
+                    summary="Crontab uses comment markers (###/@@) atypical for the system.",
+                    artifact_refs=[art["artifact_uuid"]],
+                    evidence={"path": art["data"].get("path")},
+                    mitre="T1053.003",
+                )</code></pre>
+
+<p>Register in <code>digger/detectors/__init__.py:all_detectors()</code>. Order
+mostly doesn't matter, but keep <code>TimelineBuilder</code> last.</p>
+
+<h3>Data-driven detector</h3>
+
+<p>If your detector logic is "match a list of patterns/signatures," put the
+patterns in YAML under <code>digger/rules/&lt;topic&gt;/&lt;file&gt;.yaml</code>
+and load them via the shared helpers:</p>
+
+<pre><code>from digger.detectors._rules_io import load_yaml, load_intel
+
+rules = load_yaml("my_topic/my_rules.yaml")    # bundled file
+live  = load_intel("my_feed_name")             # live intel cache (None if empty)</code></pre>
+
+<p>This pattern is used by <code>shai_hulud</code>, <code>supply_chain</code>,
+<code>c2</code>, and <code>threat_actor</code>. It keeps the rule data
+auditable and updatable without touching code.</p>
+
+<h2>A new intel feed</h2>
+
+<p>Add an entry to the <code>FEEDS</code> list in
+<code>digger/intel/feeds.py</code>:</p>
+
+<pre><code>FEEDS.append(Feed(
+    name="my_corp_blocklist",
+    url="https://intel.corp.example/blocklist.txt",
+    interval=3600,                               # poll hourly
+    parser=parse_lines,                          # uses bundled helper
+    description="Internal IP blocklist maintained by corp SOC.",
+    headers={"Authorization": "Bearer XXXXX"},   # if needed
+))</code></pre>
+
+<p>Parsers receive raw bytes and return a JSON-serializable dict. Existing
+parsers cover JSON, CSV, Spamhaus-DROP-style, and one-per-line text;
+write your own if needed.</p>
+
+<p>Detectors load the cache by name:</p>
+
+<pre><code>from digger.detectors._rules_io import load_intel
+
+bl = load_intel("my_corp_blocklist") or {}
+bad_ips = set(bl.get("entries", []))
+for art in store.iter_artifacts(collector="network"):
+    raddr = art["data"].get("raddr")
+    if raddr and raddr[0] in bad_ips:
+        yield Finding(...)</code></pre>
+
+<h2>A new compliance framework</h2>
+
+<p>Drop a YAML file under <code>digger/compliance/frameworks/</code>. See the
+<a href="compliance.html">Compliance</a> page for the predicate vocabulary
+and an example. No code change required — <code>digger compliance list</code>
+discovers it automatically.</p>
+
+<h2>A new report format</h2>
+
+<p>Reports are pure functions: <code>render_X(store: EvidenceStore) -&gt; str</code>.
+Drop a module under <code>digger/report/</code>, expose <code>render_…</code>,
+wire it into <code>digger/report/__init__.py</code> and into
+<code>cli.py:cmd_report</code>'s <code>renderers</code> dict.</p>
+
+<h2>A new exporter</h2>
+
+<p>Same pattern: pure function over the evidence store under
+<code>digger/exchange/</code>, plus a CLI sub-command in
+<code>cli.py</code>. Use <code>digger/tradecraft/tlp.py</code>'s
+<code>apply_tlp_filter()</code> to respect sharing markings.</p>
+
+<h2>Tests</h2>
+
+<p>Drop tests under <code>tests/</code> (filename <code>test_*.py</code>).
+The harness is plain pytest, no fixtures or plugins required. For collector
+and detector tests, build a temporary <code>EvidenceStore</code> on a
+<code>tmp_path</code>, seed it with synthetic artifacts, and assert on the
+emitted findings.</p>
+
+<pre><code>def test_my_detector_catches_x(tmp_path):
+    from digger.core import Artifact, EvidenceStore
+    store = EvidenceStore(tmp_path)
+    store.add_artifact(Artifact(collector="processes", category="process",
+                                subject="pid=1", data={"name": "evil"}))
+    n = MyDetector().run(store)
+    assert n &gt;= 1
+    assert any("evil" in f["title"] for f in store.iter_findings())
+    store.close()</code></pre>
+
+<p>Run with:</p>
+
+<pre><code>python -m pytest tests/test_my_module.py</code></pre>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

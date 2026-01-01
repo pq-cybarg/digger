@@ -1,0 +1,65 @@
+# Named-threat-actor TTP signatures.
+#
+# Compact, behavioral. Each entry binds a small pattern set to a known
+# adversary and one or more MITRE ATT&CK techniques.
+
+actors:
+  - name: "APT29 / Cozy Bear / Midnight Blizzard"
+    severity: "high"
+    proc_patterns:
+      - "wmic\\s+/node:.*process\\s+call\\s+create"
+      - "vssadmin\\s+delete\\s+shadows"
+      - "rundll32\\.exe\\s+[a-z]:\\\\windows\\\\system32\\\\comsvcs\\.dll,?MiniDump"
+    file_path_patterns:
+      - "[\\\\/]programdata[\\\\/]microsoft[\\\\/]wmi"
+    mitre: "T1003.001"
+    notes: "LSASS dump via comsvcs.dll MiniDump and WMIC remote exec."
+
+  - name: "APT28 / Fancy Bear"
+    severity: "high"
+    proc_patterns:
+      - "schtasks\\s+/create.*/sc\\s+ONLOGON.*Update"
+      - "msiexec\\s+/q\\s+/i\\s+http"
+    notes: "Persistence via ONLOGON scheduled task and silent msiexec install."
+
+  - name: "FIN7 / Carbon Spider"
+    severity: "high"
+    proc_patterns:
+      - "powershell.*-EncodedCommand.*JABz"
+      - "regsvr32.*scrobj\\.dll"
+    notes: "Encoded PowerShell + COM scriptlet (Squiblydoo)."
+
+  - name: "Lazarus"
+    severity: "high"
+    proc_patterns:
+      - "certutil\\s+-urlcache\\s+-split\\s+-f\\s+https?://"
+      - "explorer\\.exe.*\\.tmp"
+    file_path_patterns:
+      - "/var/tmp/\\.\\w{4}"
+    notes: "certutil download and tmp drop pattern."
+
+  - name: "Volt Typhoon / Vanguard Panda"
+    severity: "high"
+    proc_patterns:
+      - "ntdsutil"
+      - "esentutl\\s+/y\\s+/vss:c:\\\\windows\\\\ntds\\\\ntds\\.dit"
+      - "wmic\\s+process\\s+call\\s+create"
+    notes: "Living-off-the-land NTDS exfil and WMIC remote exec."
+
+  - name: "Scattered Spider / Octo Tempest"
+    severity: "high"
+    proc_patterns:
+      - "ngrok"
+      - "rclone\\s+copy"
+      - "anydesk.*-silent"
+      - "screenconnect.*--quick"
+    notes: "Remote-access tooling installs (AnyDesk/ScreenConnect/ngrok) + rclone exfil."
+
+  - name: "Black Basta / BlackCat / Akira ransomware affiliates"
+    severity: "critical"
+    proc_patterns:
+      - "vssadmin\\s+delete\\s+shadows"
+      - "wmic\\s+shadowcopy\\s+delete"
+      - "bcdedit\\s+/set\\s+\\{default\\}\\s+recoveryenabled\\s+No"
+      - "wevtutil\\s+cl\\s+(Security|System|Application)"
+    notes: "Pre-encryption defense evasion: shadow-copy + recovery + event log wipe."

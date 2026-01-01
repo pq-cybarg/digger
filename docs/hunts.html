@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Threat hunting — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="hunts">
+<main>
+
+<h1>Threat hunting
+  <span class="subtitle">Exploratory tabular queries over the evidence store. Different from detectors — they prioritize recall over precision and return rows, not alerts.</span>
+</h1>
+
+<h2>Hunts vs detectors</h2>
+
+<p>The detector stack is precision-first: every emitted Finding is meant to
+be actionable. Hunts are the opposite — recall-first, false-positives are
+fine, and the output is a table the analyst eyeballs to find candidates
+worth investigating further.</p>
+
+<table>
+<thead><tr><th></th><th>Detectors</th><th>Hunts</th></tr></thead>
+<tbody>
+<tr><td><strong>Output</strong></td><td>Findings (alerts)</td><td>Rows (tabular candidates)</td></tr>
+<tr><td><strong>Precision</strong></td><td>High</td><td>Low to medium</td></tr>
+<tr><td><strong>Recall</strong></td><td>Lower</td><td>High</td></tr>
+<tr><td><strong>When to run</strong></td><td>Every <code>scan</code></td><td>On-demand, during investigation</td></tr>
+<tr><td><strong>Audience</strong></td><td>SOC / on-call</td><td>Analyst / hunter</td></tr>
+<tr><td><strong>Where they live</strong></td><td><code>digger/detectors/</code></td><td><code>digger/hunts/library.py</code></td></tr>
+</tbody>
+</table>
+
+<h2>Running hunts</h2>
+
+<pre><code>digger hunt list                       # show every available hunt
+digger hunt list -v                    # … with descriptions
+
+digger hunt run --case-dir ./case-1    # run all hunts, dump results
+digger hunt run --case-dir ./case-1 --hunt browser-spawns-shell,curl-pipe-bash
+digger hunt run --case-dir ./case-1 --severity high
+digger hunt run --case-dir ./case-1 --tag command-and-control
+
+# Render an HTML report (collapsible per-hunt cards with full row tables)
+digger hunt run --case-dir ./case-1 --out hunts.html
+digger hunt run --case-dir ./case-1 --format md --out hunts.md
+digger hunt run --case-dir ./case-1 --format json --out hunts.json</code></pre>
+
+<p>The CLI summary sorts non-empty hunts by severity (critical → info) and
+then by row count. Empty hunts are hidden unless you pass <code>-v</code>.</p>
+
+<h2>The bundled library</h2>
+
+<table>
+<thead><tr><th>ID</th><th>Severity hint</th><th>What it looks for</th><th>MITRE</th></tr></thead>
+<tbody>
+<tr><td><code>shai-hulud-packages</code></td><td>critical</td><td>npm packages on the Shai-Hulud worm's compromised-version list</td><td>T1195.002</td></tr>
+<tr><td><code>browser-spawns-shell</code></td><td>high</td><td>Shell processes parented by a browser process</td><td>T1059</td></tr>
+<tr><td><code>encoded-powershell</code></td><td>high</td><td>powershell.exe with <code>-EncodedCommand</code> + long base64</td><td>T1059.001</td></tr>
+<tr><td><code>curl-pipe-bash</code></td><td>high</td><td>curl/wget/Invoke-WebRequest piped to bash/sh/iex</td><td>T1105</td></tr>
+<tr><td><code>dynamic-linker-hijack</code></td><td>high</td><td>LD_PRELOAD / DYLD_INSERT_LIBRARIES set in environment</td><td>T1574.006</td></tr>
+<tr><td><code>ssh-key-forced-command</code></td><td>high</td><td><code>authorized_keys</code> entries with <code>command=</code></td><td>T1098.004</td></tr>
+<tr><td><code>interpreter-in-temp</code></td><td>medium</td><td>python/node/ruby/perl running from /tmp, %TEMP%, etc.</td><td>T1059</td></tr>
+<tr><td><code>shell-init-hook</code></td><td>medium</td><td>BASH_ENV / ENV / PROMPT_COMMAND set</td><td>T1546.004</td></tr>
+<tr><td><code>process-without-exe-path</code></td><td>medium</td><td>Live processes with no exe on disk (memfd, unlinked, …)</td><td>T1055</td></tr>
+<tr><td><code>tor-exit-connection</code></td><td>medium</td><td>Established connection to a Tor bulk-exit IP</td><td>T1090.003</td></tr>
+<tr><td><code>browser-extension-sweeping-perms</code></td><td>low</td><td>Extensions with &lt;all_urls&gt;, debugger, nativeMessaging, …</td><td>T1176</td></tr>
+<tr><td><code>uncommon-listener</code></td><td>low</td><td>LISTEN sockets outside the common service-port set</td><td>T1571</td></tr>
+<tr><td><code>persistence-in-user-home</code></td><td>low</td><td>Persistence entries pointing at /Users/&lt;name&gt;/ or /home/</td><td>T1547</td></tr>
+<tr><td><code>recent-executable-in-drop</code></td><td>low</td><td>Recently-modified executables in /tmp, Downloads, %TEMP%</td><td>T1564.001</td></tr>
+<tr><td><code>high-entropy-domain</code></td><td>low</td><td>Browser-history domains whose left-most label has high entropy</td><td>T1568.002</td></tr>
+<tr><td><code>interpreter-with-external-conn</code></td><td>low</td><td>python/node/ruby with an open established connection to a public IP</td><td>T1059</td></tr>
+<tr><td><code>large-authorized-keys</code></td><td>low</td><td><code>authorized_keys</code> files with &gt;5 active keys</td><td>T1098.004</td></tr>
+</tbody>
+</table>
+
+<h2>Writing your own</h2>
+
+<p>Hunts are plain Python — register a function and you're done.</p>
+
+<pre><code>from digger.core.evidence import EvidenceStore
+from digger.hunts.base import Hunt, register
+
+
+def hunt_my_thing(store: EvidenceStore):
+    for art in store.iter_artifacts(collector="processes"):
+        d = art["data"]
+        if (d.get("username") == "root"
+                and any(d.get("exe", "").startswith(p) for p in ("/tmp/", "/var/tmp/"))):
+            yield {
+                "pid": d.get("pid"),
+                "name": d.get("name"),
+                "exe": d.get("exe"),
+                "cmdline": " ".join(d.get("cmdline") or [])[:200],
+                "_artifact": art["artifact_uuid"],
+            }
+
+
+register(Hunt(
+    id="root-from-tmp",
+    title="root-owned processes whose exe lives in /tmp",
+    description="Almost never legitimate; great signal for malicious "
+                "binaries dropped by a privileged exploit.",
+    severity_hint="high",
+    mitre="T1059",
+    tags=["execution", "privilege-escalation"],
+    columns=["pid", "name", "exe", "cmdline"],
+    fn=hunt_my_thing,
+))</code></pre>
+
+<p>Drop the file under <code>digger/hunts/</code> (or import the module
+elsewhere so it runs at registration time). The next
+<code>digger hunt list</code> will include it.</p>
+
+<h2>Sample output</h2>
+
+<p>For a live example rendered against a synthetic case, open
+<a href="sample-hunts.html" target="_blank">sample-hunts.html</a> (generated
+from this Mac's case data — only a couple of hunts return rows on a clean
+host).</p>
+
+<h2>When to reach for hunts</h2>
+
+<ul>
+<li>After a <code>scan</code> turns up something interesting and you want
+to look for the rest of the campaign on the same host.</li>
+<li>During a baseline survey of a new host — run the whole library and
+eyeball anything non-empty.</li>
+<li>While responding to an alert from another tool — use hunts to find
+adjacent IOC instances quickly.</li>
+<li>As a periodic "is anything looking suspicious?" sweep:
+<code>digger hunt run --case-dir … --severity medium</code> in a cron job.</li>
+</ul>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>
