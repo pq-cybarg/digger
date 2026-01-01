@@ -183,4 +183,76 @@ direct streaming to an indexed store.
 | GPL / AGPL | NO | NO | yes (clean-room only) |
 | VSL v1.0 (Volatility) | review per use | prefer shelling out | yes |
 
+## Round 2 — adjacent + specialist tools (added on second pass)
+
+Round 1 covered the big-name DFIR platforms. Round 2 found
+specialist tools that fill narrower roles but contain ideas digger
+could adopt cleanly.
+
+| Project | License | Niche |
+|---|---|---|
+| [Aftermath](https://github.com/jamf/aftermath) | MIT | macOS-only IR triage (Jamf) |
+| [UAC](https://github.com/tclahr/uac) | Apache 2.0 | Unix-family triage shell (AIX / ESXi / Solaris / NAS / IoT) |
+| [Atomic Red Team](https://github.com/redcanaryco/atomic-red-team) | MIT | 1,797 atomic tests mapped to MITRE ATT&CK |
+| [Falco](https://github.com/falcosecurity/falco) | Apache 2.0 | eBPF syscall-level runtime security (CNCF graduated) |
+| [Hindsight](https://github.com/obsidianforensics/hindsight) | Apache 2.0 | Chromium-only deep browser forensics |
+
+### Round 2 borrow candidates
+
+#### H. Atomic Red Team as detector-validation harness  (HIGH value, MEDIUM effort)
+
+**Source:** [redcanaryco/atomic-red-team](https://github.com/redcanaryco/atomic-red-team) (MIT). 1,797 atomic tests mapped to MITRE ATT&CK techniques — Red Canary's adversary-emulation library. Each test executes a single ATT&CK technique with documented expected behavior.
+
+**Why it matters:** digger has 29 detectors covering ~60 MITRE techniques but no systematic way to *verify* that the detector actually catches the technique it claims to. ART is the obvious harness — for each technique tag in digger's detector roster, run the matching ART test on a controlled host and assert digger's detector fires within N seconds.
+
+**How to integrate:** new `tests/integration/atomic_red_team/` directory that pulls ART YAML at test-prep time, filters to techniques digger claims to detect, and runs an end-to-end "execute → collect → scan → assert finding" pipeline. Detector accuracy becomes measurable. Coverage gaps become a coverage matrix.
+
+**Ethics gate:** ART executes real-ish attack primitives; must run only in a sandboxed test environment. Add `tests/integration/atomic_red_team/SANDBOX_REQUIRED.md` and refuse to run if `DIGGER_INTEGRATION_OK_TO_RUN_ATTACKS=1` isn't set.
+
+#### I. Aftermath-style "storyline" / narrative reconstruction in reports  (HIGH value, MEDIUM effort)
+
+**Source:** [jamf/aftermath](https://github.com/jamf/aftermath) (MIT). Aftermath's distinctive contribution isn't its collectors (most overlap with digger's) — it's the analysis phase that "reconstructs a storyline correlating file metadata, database changes, and browser information to identify infection vectors."
+
+**Why it matters:** digger emits findings independently and the report lists them; nothing synthesizes "user X visited this URL → downloaded that file → file ran with this parent → spawned that shell → connected here". A timeline-correlation post-processor that walks the evidence store and produces a narrative would massively improve report readability.
+
+**How to integrate:** new `digger.report.storyline` module — graph-walk findings via shared pids, file paths, and timestamps within ±30 s windows. Emit a "Likely event chain" block at the top of every report.
+
+#### J. Hindsight-style deep Chromium parsing  (MEDIUM value, MEDIUM effort)
+
+**Source:** [obsidianforensics/hindsight](https://github.com/obsidianforensics/hindsight) (Apache 2.0). 10 artifact types from Chromium internals including cache database parsing, autofill *values* (not counts), HTTP cookies, Local Storage records — all with cross-source correlation.
+
+**Why it matters:** digger's browser scanner is broad-and-shallow (counts everything, parses nothing for privacy reasons). For full-IR work where the operator explicitly opts in to deeper inspection, Hindsight-style parsing would tell them *what* was stolen — not just *that there are 247 saved passwords*.
+
+**How to integrate:** new `digger.collectors.common.browsers_deep` collector behind an explicit flag `--deep-browser-parse` that bypasses the counts-only privacy default. Routes through `confirm_remediation_intent` per P2 since it's a privacy-sensitive opt-in. Possibly vendor or shell out to Hindsight directly (Apache 2.0 compatible).
+
+#### K. Falco-style eBPF syscall-level runtime layer  (HIGH value, HIGHEST effort)
+
+**Source:** [falcosecurity/falco](https://github.com/falcosecurity/falco) (Apache 2.0). CNCF graduated. Kernel-level syscall monitoring with custom rule language. Real-time, not snapshot.
+
+**Why it matters:** the biggest architectural gap. Today's digger is one-shot snapshot. A Falco-style eBPF layer would let digger ALERT in real time when a process opens a sensitive file, makes a suspicious syscall, or chains together the patterns the snapshot detectors look for. Bridges between "I scanned this host" and "I'm watching this host".
+
+**Caveats:** Linux-only at first (eBPF maturity). Significant new dependency surface (libbpf or libbpfgo). Best done as a separate `digger.runtime` subsystem so the snapshot path stays Python-only.
+
+#### L. ATT&CK coverage heatmap (derived from ART × digger detector tags)  (MEDIUM value, LOW effort)
+
+**Source:** derive from Atomic Red Team's technique list + digger's per-detector `mitre` tags. No external license issue — both are MIT.
+
+**Why it matters:** today the docs claim digger covers ~60 ATT&CK techniques but it's a hand-counted assertion. A real heatmap would render a matrix: ATT&CK technique × digger-covered? Click a technique → see which detector(s) flag it. Renders to ATT&CK Navigator JSON (already supported via `digger export attack-navigator`).
+
+**How to integrate:** new `digger generate coverage` subcommand. Walks `all_detectors()` extracting `mitre` tags from every Finding-emitting site (AST inspection if needed). Cross-references with ART's technique manifest. Outputs Navigator-layer JSON + a Markdown summary.
+
+### Round 2 — updated recommended order
+
+| Order | Candidate | Why prioritized |
+|---|---|---|
+| 1 | **A. ForensicArtifacts ingestion** (Round 1) | Still highest value × lowest effort overall |
+| 2 | **H. Atomic Red Team validation harness** | Once we have it, every detector's accuracy becomes measurable — turns subjective improvement into objective |
+| 3 | **L. ATT&CK coverage heatmap** | Quick win, sets up #H by making the gap visible |
+| 4 | **I. Aftermath-style storyline reconstruction** | Improves *every existing* report; no new collectors needed |
+| 5 | **G. ELK/OpenSearch output** (Round 1) | Low effort, opens enterprise SIEM pipelines |
+| 6 | **D. `digger watch` daemon** (Round 1) | Genuinely new capability class |
+| 7 | **K. Falco-style eBPF runtime layer** | Bridges snapshot → continuous. Biggest architectural lift; do last |
+
+— end Round 2 —
+
 — end research notes —
