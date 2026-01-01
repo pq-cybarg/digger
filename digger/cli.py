@@ -657,6 +657,68 @@ def cmd_art_coverage(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_vol_info(args: argparse.Namespace) -> int:
+    from digger.volatility import (
+        DEFAULT_PLUGINS, VolatilityError, discover_binary, image_info,
+    )
+    binary = discover_binary()
+    if not binary:
+        print("no Volatility 3 binary found in PATH "
+              "(install via `pip install volatility3` to get `vol`)",
+              file=sys.stderr)
+        return 1
+    print(f"[vol] binary: {binary}")
+    if not args.image:
+        # No image — just list curated plugins per OS
+        for os_name, plugins in DEFAULT_PLUGINS.items():
+            print(f"\n=== {os_name} plugins ({len(plugins)}) ===")
+            for plugin, desc in plugins:
+                print(f"  {plugin:30s} {desc}")
+        return 0
+    try:
+        os_name, _info = image_info(args.image, binary=binary)
+    except VolatilityError as exc:
+        print(f"vol error: {exc}", file=sys.stderr)
+        return 2
+    print(f"[vol] image OS: {os_name}")
+    plugins = DEFAULT_PLUGINS.get(os_name, [])
+    print(f"[vol] curated plugins for {os_name} ({len(plugins)}):")
+    for plugin, desc in plugins:
+        print(f"  {plugin:30s} {desc}")
+    return 0
+
+
+def cmd_vol_scan(args: argparse.Namespace) -> int:
+    from digger.volatility import VolatilityError, scan_image
+    store = EvidenceStore(args.case_dir)
+    try:
+        plugins = (args.plugins.split(",")
+                   if args.plugins else None)
+        try:
+            summary = scan_image(
+                args.image, store,
+                plugins=plugins, os_name=args.os,
+                plugin_timeout_s=int(args.plugin_timeout),
+            )
+        except VolatilityError as exc:
+            print(f"vol error: {exc}", file=sys.stderr)
+            return 2
+        print(f"[vol] image OS: {summary.os_name}")
+        print(f"[vol] plugins run: {summary.plugins_run} "
+              f"({summary.plugins_failed} failed)")
+        print(f"[vol] rows emitted: {summary.rows_emitted}")
+        print(f"[vol] elapsed: {summary.elapsed_s:.1f}s")
+        if args.verbose:
+            for r in summary.per_plugin:
+                tag = "OK" if r.returncode == 0 else f"FAIL rc={r.returncode}"
+                print(f"  [{tag:>10}] {r.plugin:28s} {len(r.rows):>5} rows "
+                      f"({r.elapsed_s:.1f}s)"
+                      + (f"  truncated" if r.raw_truncated else ""))
+    finally:
+        store.close()
+    return 0
+
+
 def cmd_fa_update(args: argparse.Namespace) -> int:
     from digger.forensic_artifacts import cache_dir, update_corpus
     dest = Path(args.target).expanduser() if args.target else cache_dir()
@@ -1229,6 +1291,38 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--format", default="html", help="json|md|html")
     pr.add_argument("--out", help="Output file path")
     pr.set_defaults(func=cmd_report)
+
+    pvol = sub.add_parser(
+        "vol",
+        help="Volatility 3 memory-image bridge (requires `vol` binary)",
+    )
+    vol_sub = pvol.add_subparsers(dest="vol_cmd", required=True)
+
+    pvi = vol_sub.add_parser(
+        "info",
+        help="Identify image OS + list the curated plugin set; "
+             "without --image, just list the curated plugins per OS",
+    )
+    pvi.add_argument("--image", help="Path to memory image file")
+    pvi.set_defaults(func=cmd_vol_info)
+
+    pvs = vol_sub.add_parser(
+        "scan",
+        help="Run the curated plugin set against an image; emit "
+             "one Artifact per row into the case",
+    )
+    _add_case_arg(pvs)
+    pvs.add_argument("--image", required=True,
+                     help="Path to memory image file")
+    pvs.add_argument("--plugins",
+                     help="Comma-separated plugin list (overrides curated)")
+    pvs.add_argument("--os",
+                     help="Force OS: windows | linux | mac "
+                          "(skip image_info auto-detect)")
+    pvs.add_argument("--plugin-timeout", default=600,
+                     help="Per-plugin timeout in seconds (default 600)")
+    pvs.add_argument("--verbose", "-v", action="store_true")
+    pvs.set_defaults(func=cmd_vol_scan)
 
     pfa = sub.add_parser(
         "fa",
