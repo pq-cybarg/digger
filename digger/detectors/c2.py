@@ -67,6 +67,67 @@ class C2Detector(Detector):
     name = "c2"
     description = "C2 framework signatures (Cobalt Strike, Sliver, Mythic, Brute Ratel, Havoc, Nighthawk, Merlin, Covenant, Empire, Metasploit, RAT families) + named-pipe / TLS-fingerprint / injection-landing-pad signals."
 
+    def to_sigma_template(self) -> dict:
+        return {
+            "title": "C2 framework artifact: known beacon binary, named pipe, or injection landing pad",
+            "id": "digger-c2-template",
+            "description": (
+                "Generic C2-framework presence indicators. Covers "
+                "binary names (msfconsole / sliver / mythic-cli / "
+                "evil-winrm / etc.), default named pipes (Cobalt Strike "
+                "MSSE-*, Sliver sliver_*, Havoc demon_*), and the "
+                "injection landing-pad heuristic (Windows host process "
+                "with non-Microsoft outbound). Per-framework patterns "
+                "are loaded live from c2_signatures.yaml + SigmaHQ "
+                "corpus."
+            ),
+            "status": "experimental",
+            "author": "digger",
+            "logsource": {"category": "process_creation"},
+            "detection": {
+                "selection_c2_binaries": {
+                    "Image|endswith": [
+                        "/msfconsole", "/msfvenom",
+                        "/sliver-client", "/sliver",
+                        "/mythic-cli", "/mythic",
+                        "/evil-winrm",
+                        "/demon", "/havoc",
+                        "/badger.exe",
+                        "/nighthawk",
+                        "/merlinagent", "/merlinserver",
+                        "/GruntHTTP", "/grunt.exe", "/Covenant.exe",
+                        "/empire", "/starkiller",
+                        "/pupysh", "/pupyclient", "/pupygen",
+                        "/posh-c2", "/poshc2",
+                    ],
+                },
+                "selection_named_pipes": {
+                    "CommandLine|contains": [
+                        "\\\\.\\pipe\\MSSE-",
+                        "\\\\.\\pipe\\postex_",
+                        "\\\\.\\pipe\\msagent_",
+                        "\\\\.\\pipe\\sliver_",
+                        "\\\\.\\pipe\\demon_",
+                        "\\\\.\\pipe\\havoc_",
+                        "\\\\.\\pipe\\bratel",
+                        "\\\\.\\pipe\\nh_",
+                    ],
+                },
+                "selection_injection_pad": {
+                    "Image|endswith": [
+                        "/svchost.exe", "/dllhost.exe", "/explorer.exe",
+                        "/spoolsv.exe", "/rundll32.exe", "/msbuild.exe",
+                        "/InstallUtil.exe", "/regsvr32.exe",
+                        "/mshta.exe", "/wmic.exe",
+                    ],
+                },
+                "condition": "1 of selection_*",
+            },
+            "level": "critical",
+            "tags": ["attack.t1071", "attack.t1573", "attack.t1095",
+                    "attack.t1055", "attack.command_and_control"],
+        }
+
     def detect(self, store: EvidenceStore) -> Iterable[Finding]:
         rules = load_yaml("c2/c2_signatures.yaml") or {}
         frameworks = rules.get("frameworks", [])

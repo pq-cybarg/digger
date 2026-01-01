@@ -78,6 +78,77 @@ class LolbinDetector(Detector):
     name = "lolbins"
     description = "LOLBAS/GTFOBins-style abuse of trusted binaries."
 
+    def to_sigma_template(self) -> dict:
+        return {
+            "title": "LOLBin / GTFOBins abuse: trusted binary used for download / execution",
+            "id": "digger-lolbins-template",
+            "description": (
+                "A trusted system binary (certutil, bitsadmin, mshta, "
+                "regsvr32, rundll32, msbuild, installutil, osascript, "
+                "xattr, curl/wget, netcat/socat, python/bash one-liners) "
+                "is invoked in a way that maps to a documented "
+                "LOLBAS / GTFOBins technique."
+            ),
+            "status": "experimental",
+            "author": "digger",
+            "logsource": {"category": "process_creation"},
+            "detection": {
+                "selection_certutil": {
+                    "Image|endswith": ["/certutil.exe", "/certutil"],
+                    "CommandLine|contains": ["-urlcache", "-encode", "-decode", "-decodehex"],
+                },
+                "selection_bitsadmin": {
+                    "Image|endswith": "/bitsadmin.exe",
+                    "CommandLine|contains": ["/transfer", "/addfile"],
+                },
+                "selection_mshta": {
+                    "Image|endswith": "/mshta.exe",
+                    "CommandLine|contains": ["http://", "https://", "javascript:"],
+                },
+                "selection_regsvr32_squiblydoo": {
+                    "Image|endswith": "/regsvr32.exe",
+                    "CommandLine|re": r"/i:https?://|/s\s+/u",
+                },
+                "selection_rundll32_url": {
+                    "Image|endswith": "/rundll32.exe",
+                    "CommandLine|contains": ["javascript:", "http"],
+                },
+                "selection_msbuild": {
+                    "Image|endswith": "/msbuild.exe",
+                    "CommandLine|endswith": [".xml", ".csproj", ".proj"],
+                },
+                "selection_osascript_shell": {
+                    "Image|endswith": "/osascript",
+                    "CommandLine|contains|all": ["-e", "do shell script"],
+                },
+                "selection_xattr_quarantine": {
+                    "Image|endswith": "/xattr",
+                    "CommandLine|contains|all": ["-d", "com.apple.quarantine"],
+                },
+                "selection_curl_wget_exec": {
+                    "Image|endswith": ["/curl", "/wget"],
+                    "CommandLine|re": r"https?://[^\s]+\.(?:sh|py|pl|exe|dll|dylib|bin)\b",
+                },
+                "selection_netcat_revshell": {
+                    "Image|endswith": ["/nc", "/ncat", "/nc.exe", "/ncat.exe"],
+                    "CommandLine|re": r"-e\s|/bin/(sh|bash)|cmd\.exe",
+                },
+                "selection_bash_devtcp": {
+                    "Image|endswith": "/bash",
+                    "CommandLine|contains": "/dev/tcp/",
+                },
+                "condition": "1 of selection_*",
+            },
+            "level": "high",
+            "tags": [
+                "attack.execution", "attack.defense_evasion",
+                "attack.t1140", "attack.t1197", "attack.t1218",
+                "attack.t1218.005", "attack.t1218.010", "attack.t1218.011",
+                "attack.t1127.001", "attack.t1105", "attack.t1059",
+                "attack.t1059.004", "attack.t1059.006",
+            ],
+        }
+
     def detect(self, store: EvidenceStore) -> Iterable[Finding]:
         for art in store.iter_artifacts(collector="processes"):
             data = art["data"]
