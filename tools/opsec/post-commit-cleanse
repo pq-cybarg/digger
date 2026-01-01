@@ -24,7 +24,7 @@
 #   - macOS APFS file BIRTHTIME is NOT changed by `touch`. Real
 #     birthtime wiping needs copy → rm → mv-back (destroys inodes).
 #     Not done here — too destructive for a hook. Use a dedicated
-#     `tools/opsec/wipe-birthtimes.sh` (TODO) when you want full
+#     `tools/opsec/wipe-birthtimes.py` when you want full
 #     filesystem cleansing.
 #   - The local reflog still records real wallclock for HEAD@{N}
 #     entries. Reflog is private to the local repo and is GC'd
