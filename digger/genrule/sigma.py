@@ -86,6 +86,8 @@ def _tags(finding: dict) -> list[str]:
                                   "attack.privilege_escalation"],
         "discovery":            ["attack.discovery"],
         "vect":                 ["attack.impact", "attack.t1486", "attack.t1485"],
+        "info_stealer":         ["attack.credential_access", "attack.t1555.003",
+                                  "attack.t1041"],
         "threat_actor":         ["attack.execution"],
         "env_hijack":           ["attack.privilege_escalation", "attack.defense_evasion"],
         "persistence_outlier": ["attack.persistence"],
