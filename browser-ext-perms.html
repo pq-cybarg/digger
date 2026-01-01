@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Browser extension permission combos — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="browser-ext-perms">
+<main>
+
+<h1>Browser extension permission combinations
+  <span class="subtitle">Specific permission-combination fingerprints documented in malicious-extension research (B1-B8).</span>
+</h1>
+
+<p>The existing <a href="browser-scanner.html">BrowserDetector</a>
+flags any extension that holds at least one risky permission and
+emits a single coarse medium-severity finding. The
+<code>browser_ext_perms</code> detector runs alongside it on the
+same browser-extension artifacts and emits actionable, finer-
+grained findings keyed to specific permission <em>combinations</em>
+— each is a documented malicious-extension fingerprint.</p>
+
+<h2>Detection layers (B1–B8)</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>What it catches</th><th>MITRE</th></tr></thead>
+  <tbody>
+    <tr><td>B1</td><td>high</td><td><code>nativeMessaging</code>. Pipes stdin/stdout to a host binary registered in NativeMessagingHosts. Legit for 1Password / Bitwarden / browser-tab managers; core primitive for ad-injector / credential-stealer browser malware.</td><td>T1071.001</td></tr>
+    <tr><td>B2</td><td>critical (blocking) / high (read-only)</td><td><code>webRequest</code> or <code>webRequestBlocking</code> + <code>&lt;all_urls&gt;</code>. Intercept / modify every HTTP request. The evil-adblock fingerprint (DataSpii et al). Manifest-V3 deprecates webRequestBlocking — seeing it in 2025+ is notable on its own.</td><td>T1557</td></tr>
+    <tr><td>B3</td><td>high</td><td><code>&lt;all_urls&gt;</code> + <code>cookies</code> + <code>tabs</code>. Session-theft fingerprint — read every site's cookies, identify logged-in sessions, exfil via tab updates. Legit password managers fit this shape; operator confirms.</td><td>T1539</td></tr>
+    <tr><td>B4</td><td>high</td><td><code>proxy</code>. Override Chrome's proxy — route all browser traffic through attacker relay. Rare legit cases (VPN extensions).</td><td>T1090</td></tr>
+    <tr><td>B5</td><td>high</td><td><code>debugger</code>. Attach to other tabs via Chrome DevTools Protocol — read DOM, execute JS, snapshot state. Rarely needed in shipped extensions.</td><td>T1056.001</td></tr>
+    <tr><td>B6</td><td>medium</td><td>Spy stack: <code>&lt;all_urls&gt;</code> + <code>tabs</code> + <code>storage</code> + <code>runtime</code> + <code>scripting</code>. Generic surveillance fingerprint. Many legit extensions (LastPass, Honey, Grammarly, AdBlock, uBlock) fit this shape. Suppressed when B2 or B3 already fires.</td><td>T1176</td></tr>
+    <tr><td>B7</td><td>medium</td><td>Hardware bridge — <code>usbDevices</code> / <code>printerProvider</code> / <code>vpnProvider</code> / <code>platformKeys</code>. Browser extensions usually don't need physical device access.</td><td>T1543</td></tr>
+    <tr><td>B8</td><td>medium</td><td><code>declarativeNetRequest</code> + ≥20 host patterns. Manifest-V3 cousin of B2 — broad host coverage becomes equivalent surveillance surface.</td><td>T1557</td></tr>
+  </tbody>
+</table>
+
+<h2>Stacking</h2>
+
+<p>One extension can trip multiple layers — e.g. a single shipped
+malicious extension with <code>nativeMessaging</code> +
+<code>proxy</code> + <code>debugger</code> emits all three findings.
+B6 (spy stack) is the only one that's suppressed when stronger
+findings cover it.</p>
+
+<h2>No new CLI needed</h2>
+
+<p>The detector runs on the existing browser collector's extension
+artifacts during <code>digger scan</code>.</p>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>

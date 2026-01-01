@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>macOS TCC consent audit — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="macos-tcc">
+<main>
+
+<h1>macOS TCC consent audit
+  <span class="subtitle">Surfaces silent, persistent grants in the Transparency / Consent / Control database (T1-T5).</span>
+</h1>
+
+<p>Apple's TCC database is macOS's per-app privacy permission
+system. A compromised TCC entry gets an app silent, permanent
+capability to read Camera / Mic / Screen / Full Disk / inject
+synthetic events — no prompt, no UI. The 2022-2025 CVE record
+(CVE-2022-26721, CVE-2022-26726, CVE-2024-27821, CVE-2024-44170)
+plus the entire commercial-spyware family (Pegasus / Predator /
+OSX-Cocyer / JaskaGO / XCSSET) routes its persistence through
+TCC.</p>
+
+<h2>How it works</h2>
+
+<p>The TCC collector (<code>digger.collectors.macos.tcc</code>)
+already runs as part of <code>digger collect</code>; it reads both
+the system DB (<code>/Library/Application Support/com.apple.TCC/TCC.db</code>,
+requires Full Disk Access) and the per-user DB
+(<code>~/Library/Application Support/com.apple.TCC/TCC.db</code>) in
+<code>immutable=1&amp;mode=ro</code> mode so the live browser never
+locks. <code>MacosTccDetector</code> consumes the emitted Artifacts
+and emits findings.</p>
+
+<h2>Skip rules</h2>
+
+<ul class="kv">
+  <li>Apple clients (bundle IDs <code>com.apple.*</code>, paths under <code>/System/</code>, <code>/usr/libexec/</code>, <code>/sbin/</code>, etc.) — first-party.</li>
+  <li><code>KNOWN_GOOD_BUNDLE_IDS</code> allowlist: Zoom, Slack, 1Password, Loom, Bartender, Raycast, Alfred, CleanShot, Linear, Docker, Parsec, UTM, Cyberduck, Warp, Continue, Cursor, Brave, Arc, Firefox, Chrome, VS Code, GitHub Electron, Anthropic Claude, Perplexity, ChatGPT, CleanMyMac, WeChat.</li>
+  <li>Operators extend via <code>DIGGER_TCC_TRUSTED_CLIENTS</code> (comma-separated bundle IDs).</li>
+  <li><code>auth_value</code> not in (Allowed, Allowed-limited) — emits nothing.</li>
+  <li>Non-dangerous services (MediaLibrary etc.) — emits nothing.</li>
+</ul>
+
+<h2>Detection layers (T1–T5)</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>What it catches</th><th>MITRE</th></tr></thead>
+  <tbody>
+    <tr><td>T1</td><td>high</td><td>FullDiskAccess (or per-folder Documents/Desktop/Downloads/NetworkVolumes/RemovableVolumes/SysAdminFiles) granted to non-Apple, non-allowlisted client. Credential-harvesting + cloud-token-theft vector.</td><td>T1543.001</td></tr>
+    <tr><td>T2</td><td>critical</td><td>Accessibility / PostEvent / ListenEvent granted to non-Apple client. Synthetic-event-injection / keylogger / drive-other-apps primitive — the canonical macOS spyware signature.</td><td>T1056.001</td></tr>
+    <tr><td>T3</td><td>critical</td><td>Allowed grant to binary in suspicious path: <code>/tmp</code>, <code>/Users/Shared</code>, <code>/private/var/folders</code>, <code>/Library/Caches</code>, <code>/.Trash</code>, <code>/Downloads</code>, <code>/private/tmp</code>.</td><td>T1543.001</td></tr>
+    <tr><td>T4</td><td>high</td><td>ScreenCapture / Camera / Microphone / AppleEvents / ContactsFull granted to non-Apple client.</td><td>T1113 / T1125 / T1123 / T1559.001 / T1087</td></tr>
+    <tr><td>T5</td><td>critical</td><td>User-DB has Allowed grant that system-DB lacks for same client — the direct-write TCC.db bypass shape (CVE-2022-26726 / CVE-2024-27821 / XCSSET / Shlayer / JaskaGO).</td><td>T1543.001</td></tr>
+  </tbody>
+</table>
+
+<h2>No new CLI needed</h2>
+
+<p>The existing <code>macos.tcc</code> collector already runs as part
+of <code>digger collect</code>; the detector runs at
+<code>digger scan</code> time. To restrict collection:</p>
+
+<pre><code>$ digger collect --case-dir /tmp/case --only macos.tcc
+$ digger scan --case-dir /tmp/case
+</code></pre>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>

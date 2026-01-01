@@ -32,6 +32,11 @@
       { id: "android",            href: "android.html",            label: "Android forensics (adb)" },
       { id: "mcp",                href: "mcp.html",                label: "MCP config audit" },
       { id: "ci-workflow-audit",  href: "ci-workflow-audit.html",  label: "CI/CD workflow audit" },
+      { id: "git-hooks",          href: "git-hooks.html",          label: "Git hook audit" },
+      { id: "macos-tcc",          href: "macos-tcc.html",          label: "macOS TCC consent audit" },
+      { id: "macos-launchd",      href: "macos-launchd.html",      label: "macOS launchd deep audit" },
+      { id: "vscode",             href: "vscode.html",             label: "VS Code audit" },
+      { id: "browser-ext-perms",  href: "browser-ext-perms.html",  label: "Browser extension perm combos" },
     ]},
     { title: "Threat intel", items: [
       { id: "intel",            href: "intel.html",            label: "Live feeds" },

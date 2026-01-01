@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>macOS launchd deep audit — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="macos-launchd">
+<main>
+
+<h1>macOS launchd deep audit
+  <span class="subtitle">LaunchAgent / LaunchDaemon plist deep audit (L1-L7) — what the generic persistence detector misses.</span>
+</h1>
+
+<p>The generic <code>persistence_outlier</code> detector flags
+launchd plists whose programs live in writable temp dirs.
+<code>MacosLaunchdDetector</code> covers the macOS-launchd-specific
+patterns it doesn't.</p>
+
+<h2>How it works</h2>
+
+<p>The <code>macos.launchd</code> collector already emits one Artifact
+per plist (parsing ProgramArguments / RunAtLoad / KeepAlive /
+WatchPaths / QueueDirectories / Label / etc); this detector runs
+deeper rules against those fields. Apple's
+<code>/System/Library/Launch{Daemons,Agents}/*</code> plists with a
+<code>com.apple.*</code> Label are SIP-protected and skipped.</p>
+
+<h2>Detection layers (L1–L7)</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>What it catches</th><th>MITRE</th></tr></thead>
+  <tbody>
+    <tr><td>L1</td><td>high &rarr; critical</td><td>Network-fetch in ProgramArguments. Critical when piped to shell. The Silver Sparrow / Shlayer / OSAMiner / BundloreRunner downloader pattern.</td><td>T1543.001</td></tr>
+    <tr><td>L2</td><td>medium</td><td>Long base64 / hex blob in arguments. Common hiding place for shellcode or a one-line Python downloader.</td><td>T1027</td></tr>
+    <tr><td>L3</td><td>medium</td><td>Label / filename mismatch. Plist file <code>com.evil.malware.plist</code> declares <code>Label = com.apple.softwareupdate</code> — documented masquerade in OSX/Silver Sparrow, OSX/Cocyer, JaskaGO.</td><td>T1036</td></tr>
+    <tr><td>L4</td><td>high</td><td>WatchPaths or QueueDirectories on user-writable dir. Anyone with write access to that path fires the payload — "drop a file, get RCE" persistence chain.</td><td>T1546</td></tr>
+    <tr><td>L5</td><td>medium</td><td>Empty or missing <code>Label</code> key. Most legitimate plists set Label; missing is a malware-behavior signature.</td><td>T1543.001</td></tr>
+    <tr><td>L6</td><td>high</td><td>Interpreter (<code>/bin/sh</code>, <code>/bin/bash</code>, <code>python</code>, <code>perl</code>, <code>ruby</code>) + <code>KeepAlive=true</code> = launchd respawn loop = daemon-shaped malware.</td><td>T1059.004</td></tr>
+    <tr><td>L7</td><td>medium</td><td>Plist runs <code>osascript</code>. AppleScript can drive other apps via AppleEvents, prompt for credentials, scrape browser state — privilege-escalation primitive. Legit users exist (Bartender, Hammerspoon) but rare in a daemon.</td><td>T1059.002</td></tr>
+  </tbody>
+</table>
+
+<h2>No new CLI needed</h2>
+
+<p>The existing <code>macos.launchd</code> collector already runs as
+part of <code>digger collect</code>; the detector runs at
+<code>digger scan</code> time.</p>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>
