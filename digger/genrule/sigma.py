@@ -75,6 +75,8 @@ def _tags(finding: dict) -> list[str]:
         "collection":           ["attack.collection"],
         "nightmare_eclipse":    ["attack.privilege_escalation", "attack.defense_evasion",
                                   "attack.command_and_control"],
+        "telemetry_jammer":     ["attack.collection"],
+        "warbird_blocker":      ["attack.execution"],
         "threat_actor":         ["attack.execution"],
         "env_hijack":           ["attack.privilege_escalation", "attack.defense_evasion"],
         "persistence_outlier": ["attack.persistence"],
