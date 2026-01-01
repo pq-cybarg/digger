@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shell rc / profile audit — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="shell-profile-audit">
+<main>
+
+<h1>Shell rc / profile audit
+  <span class="subtitle">~/.bashrc / .zshrc / .profile / fish / nushell init-file deep audit (SH1-SH7).</span>
+</h1>
+
+<p>Shell rc / profile / login files are a top-tier persistence +
+injection surface — a single line in <code>~/.bashrc</code> fires
+on every new terminal. The existing TrapDoor detector matches
+specific campaign markers in known rc files; this auditor adds
+the general malicious-pattern audit modeled on
+<a href="systemd-audit.html">systemd_audit</a> and
+<a href="macos-launchd.html">macos_launchd</a>.</p>
+
+<h2>Files captured (collector <code>shell.profile</code>)</h2>
+
+<p>Per-user under <code>HOME</code>:</p>
+<ul class="kv">
+  <li><code>.bashrc</code> / <code>.bash_profile</code> / <code>.bash_login</code> / <code>.bash_logout</code></li>
+  <li><code>.profile</code></li>
+  <li><code>.zshrc</code> / <code>.zprofile</code> / <code>.zlogin</code> / <code>.zshenv</code> / <code>.zlogout</code></li>
+  <li><code>.kshrc</code> / <code>.cshrc</code> / <code>.tcshrc</code> / <code>.inputrc</code></li>
+  <li><code>.config/zsh/.zshrc</code> + <code>.zshenv</code> + <code>.zprofile</code></li>
+  <li><code>.config/fish/config.fish</code> + <code>conf.d/*.fish</code> + <code>functions/*.fish</code></li>
+  <li><code>.config/nu/{config,env}.nu</code> + <code>.config/nushell/{config,env}.nu</code></li>
+</ul>
+
+<p>System-wide:</p>
+<ul class="kv">
+  <li><code>/etc/bash.bashrc</code> / <code>/etc/bash_completion</code></li>
+  <li><code>/etc/profile</code> / <code>/etc/profile.d/*.sh</code></li>
+  <li><code>/etc/zshrc</code> / <code>/etc/zprofile</code> / <code>/etc/zshenv</code></li>
+  <li><code>/etc/csh.cshrc</code> / <code>/etc/csh.login</code></li>
+</ul>
+
+<p>Per-file read cap: 256 KiB. <code>_infer_shell()</code> classifies
+the flavor (zsh / bash / fish / nushell / sh fallback).</p>
+
+<h2>Detection layers (SH1–SH7)</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>What it catches</th><th>MITRE</th></tr></thead>
+  <tbody>
+    <tr><td>SH1</td><td>high &rarr; critical</td><td>Network-fetch in rc (curl/wget/nc/socat/python-socket). Init fires on every new terminal — the fetch runs constantly. Critical for pipe-to-shell.</td><td>T1546.004</td></tr>
+    <tr><td>SH2</td><td>medium</td><td>Long base64 / escaped-hex sequence. Sometimes legit (vendored completion scripts); often a hidden one-liner.</td><td>T1027</td></tr>
+    <tr><td>SH3</td><td>high</td><td>PATH prepended with writable head. Bash/zsh <code>export PATH=...:$PATH</code> AND fish <code>set -gx PATH ... $PATH</code> syntaxes. GTFOBins-style path hijack.</td><td>T1574.007</td></tr>
+    <tr><td>SH4</td><td>high</td><td>Alias hijack of security-critical command (sudo / ssh / git / docker / kubectl / curl / ls / cd / rm / etc). Credential-theft + command-substitution primitive.</td><td>T1546.004</td></tr>
+    <tr><td>SH5</td><td>medium</td><td><code>trap</code> / <code>PROMPT_COMMAND</code> / <code>precmd</code> / <code>preexec</code> / <code>chpwd</code> / <code>add-zsh-hook</code>. Legit users exist (oh-my-zsh, starship) but also a keystroke-injection primitive.</td><td>T1546</td></tr>
+    <tr><td>SH6</td><td>high</td><td><code>source</code> / <code>.</code> from writable path. /tmp, /Users/Shared, /home, /root, /.cache, /.config, Downloads + relative paths.</td><td>T1546.004</td></tr>
+    <tr><td>SH7</td><td>critical</td><td><code>LD_PRELOAD</code> / <code>LD_AUDIT</code> / <code>DYLD_INSERT_LIBRARIES</code> / <code>DYLD_LIBRARY_PATH</code> / <code>LD_LIBRARY_PATH</code> export. Symbiote / Cuttlefish / FontOnLake user-mode rootkit primitive.</td><td>T1574.006</td></tr>
+  </tbody>
+</table>
+
+<h2>No new CLI needed</h2>
+
+<p>The shell-profile collector is registered in the common
+collectors group and runs as part of <code>digger collect</code>;
+the detector runs at <code>digger scan</code> time.</p>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>
