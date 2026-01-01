@@ -657,6 +657,47 @@ def cmd_art_coverage(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_hindsight_scan(args: argparse.Namespace) -> int:
+    from digger.hindsight import (
+        DEFAULT_INCLUDE, HindsightError, SUPPORTED_INCLUDE, run_scan,
+    )
+    if args.list_kinds:
+        print("Supported deep-parse data kinds:")
+        for k in SUPPORTED_INCLUDE:
+            tag = "default" if k in DEFAULT_INCLUDE else "explicit"
+            print(f"  {k:12s} ({tag})")
+        return 0
+    if not args.case_dir:
+        print("--case-dir required", file=sys.stderr)
+        return 2
+    include = (args.include.split(",")
+               if args.include else list(DEFAULT_INCLUDE))
+    profiles = None
+    if args.profile:
+        profiles = [Path(p) for p in args.profile.split(",")]
+    store = EvidenceStore(args.case_dir)
+    try:
+        try:
+            summary = run_scan(
+                store,
+                deep=bool(args.deep_browser_parse),
+                include=include,
+                profiles=profiles,
+            )
+        except HindsightError as exc:
+            print(f"hindsight error: {exc}", file=sys.stderr)
+            return 2
+    finally:
+        store.close()
+    if not summary["proceeded"]:
+        print(f"hindsight: SKIPPED — {summary['reason']}", file=sys.stderr)
+        return 1
+    print(f"hindsight: scanned {summary['profiles']} profile(s), "
+          f"{summary['rows_emitted']} rows emitted "
+          f"(include={','.join(summary['include'])})")
+    return 0
+
+
 def cmd_vol_info(args: argparse.Namespace) -> int:
     from digger.volatility import (
         DEFAULT_PLUGINS, VolatilityError, discover_binary, image_info,
@@ -1291,6 +1332,38 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--format", default="html", help="json|md|html")
     pr.add_argument("--out", help="Output file path")
     pr.set_defaults(func=cmd_report)
+
+    phs = sub.add_parser(
+        "hindsight",
+        help="Opt-in deep Chromium profile parser (history / cookies "
+             "/ logins metadata; sensitive blobs LENGTH ONLY, never "
+             "decrypted)",
+    )
+    hs_sub = phs.add_subparsers(dest="hs_cmd", required=True)
+
+    phss = hs_sub.add_parser(
+        "scan",
+        help="Run the deep parser against discovered Chromium profiles",
+    )
+    phss.add_argument("--case-dir", help="Case directory (EvidenceStore)")
+    phss.add_argument("--deep-browser-parse", action="store_true",
+                      help="Required to actually parse — paired with "
+                           "DIGGER_HINDSIGHT_OK=1 env var")
+    phss.add_argument(
+        "--include",
+        help="Comma-separated data kinds to include "
+             "(default: history,downloads,bookmarks). "
+             "All: history,downloads,bookmarks,cookies,logins,"
+             "autofill,web_data",
+    )
+    phss.add_argument(
+        "--profile",
+        help="Comma-separated explicit profile directories "
+             "(default: auto-discover)",
+    )
+    phss.add_argument("--list-kinds", action="store_true",
+                      help="List supported data kinds and exit")
+    phss.set_defaults(func=cmd_hindsight_scan)
 
     pvol = sub.add_parser(
         "vol",
