@@ -746,6 +746,39 @@ def cmd_k8s_collect(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ci_workflow_audit(args: argparse.Namespace) -> int:
+    from digger.ci import audit_workflows, emit_records_to_store
+    store = EvidenceStore(args.case_dir)
+    try:
+        roots = ([r.strip() for r in args.roots.split(",") if r.strip()]
+                  if args.roots else None)
+        records = audit_workflows(roots=roots)
+        emitted = emit_records_to_store(records, store)
+        pwn = sum(
+            1 for r in records
+            if r.has_pull_request_target_with_checkout_head
+        )
+        wf_run = sum(1 for r in records if r.has_workflow_run_trigger)
+        inj = sum(1 for r in records if r.injectable_interpolations)
+        unpinned = sum(
+            1 for r in records
+            if any(not a.sha_pinned and not a.is_trusted_owner
+                   and not a.is_local
+                   for a in r.actions)
+        )
+        selfmod = sum(1 for r in records if r.self_modifying)
+        print(f"[ci] workflows audited: {len(records)}")
+        print(f"[ci]   pwn-request pattern:        {pwn}")
+        print(f"[ci]   workflow_run-triggered:     {wf_run}")
+        print(f"[ci]   injectable interpolations:  {inj}")
+        print(f"[ci]   unpinned 3rd-party actions: {unpinned}")
+        print(f"[ci]   self-modifying:             {selfmod}")
+        print(f"[ci] artifacts emitted: {emitted}")
+    finally:
+        store.close()
+    return 0
+
+
 def cmd_mcp_audit(args: argparse.Namespace) -> int:
     from digger.mcp import audit_mcp_configs, emit_records_to_store
     store = EvidenceStore(args.case_dir)
@@ -1784,6 +1817,31 @@ def build_parser() -> argparse.ArgumentParser:
     pma.add_argument("--verbose", "-v", action="store_true",
                      help="Print per-config-kind breakdown")
     pma.set_defaults(func=cmd_mcp_audit)
+
+    pc = sub.add_parser(
+        "ci",
+        help="CI/CD pipeline security auditor — currently "
+             "GitHub Actions workflows. Parses .github/workflows/"
+             "*.yml under the given roots, runs W1-W7 checks "
+             "(pwn-request, workflow_run from forks, script-"
+             "injection interpolations, unpinned 3rd-party "
+             "actions, persist-credentials, write-all "
+             "permissions, self-modifying workflows).",
+    )
+    c_sub = pc.add_subparsers(dest="ci_cmd", required=True)
+
+    pca = c_sub.add_parser(
+        "audit-workflows",
+        help="Walk .github/workflows/*.yml under the supplied "
+             "roots (default: cwd), emit one Artifact per "
+             "workflow. CiWorkflowAuditDetector runs on them at "
+             "digger scan time.",
+    )
+    _add_case_arg(pca)
+    pca.add_argument("--roots",
+                     help="Comma-separated repo / workflow-dir / "
+                          "single-file paths (default: cwd)")
+    pca.set_defaults(func=cmd_ci_workflow_audit)
 
     pp = sub.add_parser(
         "plaso",
