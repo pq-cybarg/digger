@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Launch the ghidbar menu-bar app using its self-contained venv.
+exec "$HOME/.local/share/ghidbar/venv/bin/python" \
+     "$HOME/.local/share/ghidbar/ghidbar.py" "$@"

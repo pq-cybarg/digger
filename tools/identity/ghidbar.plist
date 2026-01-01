@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+                       "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Auto-start ghidbar at login.
+
+  Install:
+      cp ~/.local/share/ghidbar/com.ghidbar.menubar.plist ~/Library/LaunchAgents/
+      launchctl load ~/Library/LaunchAgents/com.ghidbar.menubar.plist
+
+  Disable:
+      launchctl unload ~/Library/LaunchAgents/com.ghidbar.menubar.plist
+      rm ~/Library/LaunchAgents/com.ghidbar.menubar.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ghidbar.menubar</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__HOME__/.local/bin/ghidbar</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>__HOME__/.config/ghidbar/ghidbar.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/.config/ghidbar/ghidbar.err.log</string>
+</dict>
+</plist>
