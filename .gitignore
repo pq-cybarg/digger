@@ -51,3 +51,6 @@ case_signature.json
 sigma-out/
 out/sigma/
 sample_report.html
+
+# Claude Code harness state
+.claude/
