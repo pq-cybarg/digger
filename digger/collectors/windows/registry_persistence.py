@@ -31,6 +31,10 @@ PERSISTENCE_KEYS: list[tuple[str, str, str]] = [
     ("HKLM", r"SOFTWARE\Microsoft\Active Setup\Installed Components", "T1547.014"),
     ("HKLM", r"SOFTWARE\Microsoft\Office\Outlook\Addins", "T1137.006"),
     ("HKLM", r"SOFTWARE\Microsoft\Office\14.0\Excel\Resiliency", "T1137"),
+    # Not strictly persistence, but the telemetry_jammer T6 check
+    # wants the AllowTelemetry value out of this key.
+    ("HKLM", r"SOFTWARE\Policies\Microsoft\Windows\DataCollection",
+     "T1562.001"),
 ]
 
 _HIVE_MAP = {

@@ -141,18 +141,31 @@ def test_disabled_task_not_flagged(tmp_path):
 # ---- T6 registry AllowTelemetry ------------------------------------- #
 
 
+def _datacollection_artifact(values: dict) -> Artifact:
+    """Build an artifact in the shape windows.registry_persistence
+    actually emits (collector name, hive/subkey/values dict)."""
+    return Artifact(
+        collector="windows.registry_persistence",
+        category="persistence",
+        subject="HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection",
+        data={
+            "hive": "HKLM",
+            "subkey":
+                r"SOFTWARE\Policies\Microsoft\Windows\DataCollection",
+            "mitre": "T1562.001",
+            "values": values,
+            "subkey_count": 0,
+            "subkey_sample": [],
+        },
+    )
+
+
 def test_allowtelemetry_above_zero_flagged(tmp_path):
     store = _store(tmp_path)
-    store.add_artifact(Artifact(
-        collector="registry_persistence", category="persistence",
-        subject="reg:AllowTelemetry",
-        data={
-            "path": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection",
-            "name": "AllowTelemetry", "value": 3,
-        },
-    ))
+    store.add_artifact(_datacollection_artifact({"AllowTelemetry": 3}))
     findings = list(TelemetryJammerDetector().detect(store))
-    hits = [f for f in findings if f.evidence.get("kind") == "telemetry_registry"]
+    hits = [f for f in findings
+            if f.evidence.get("kind") == "telemetry_registry"]
     assert hits, [f.title for f in findings]
     assert hits[0].evidence.get("value") == 3
     mit = hits[0].evidence.get("remediation_commands") or ""
@@ -163,16 +176,68 @@ def test_allowtelemetry_above_zero_flagged(tmp_path):
 
 def test_allowtelemetry_zero_not_flagged(tmp_path):
     store = _store(tmp_path)
+    store.add_artifact(_datacollection_artifact({"AllowTelemetry": 0}))
+    findings = list(TelemetryJammerDetector().detect(store))
+    assert not [f for f in findings
+                if f.evidence.get("kind") == "telemetry_registry"]
+    store.close()
+
+
+def test_allowtelemetry_missing_value_flagged(tmp_path):
+    """If the key is collected but lacks AllowTelemetry, the policy
+    isn't set — telemetry is on by default. T6 should fire."""
+    store = _store(tmp_path)
+    store.add_artifact(_datacollection_artifact({
+        "OtherFlag": 1,
+    }))
+    findings = list(TelemetryJammerDetector().detect(store))
+    hits = [f for f in findings
+            if f.evidence.get("kind") == "telemetry_registry"]
+    assert hits
+    assert hits[0].evidence.get("value") is None
+    store.close()
+
+
+def test_allowtelemetry_legacy_wrong_collector_ignored(tmp_path):
+    """The pre-fix code queried ``collector="registry_persistence"``
+    (no ``windows.`` prefix). Confirm that with the fix, an artifact
+    under the legacy/wrong collector name is correctly ignored."""
+    store = _store(tmp_path)
     store.add_artifact(Artifact(
-        collector="registry_persistence", category="persistence",
+        collector="registry_persistence",   # wrong name
+        category="persistence",
         subject="reg:AllowTelemetry",
         data={
-            "path": "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection",
-            "name": "AllowTelemetry", "value": 0,
+            "path":
+                "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection",
+            "name": "AllowTelemetry", "value": 3,
         },
     ))
     findings = list(TelemetryJammerDetector().detect(store))
-    assert not [f for f in findings if f.evidence.get("kind") == "telemetry_registry"]
+    assert not [f for f in findings
+                if f.evidence.get("kind") == "telemetry_registry"]
+    store.close()
+
+
+def test_allowtelemetry_wrong_subkey_ignored(tmp_path):
+    """An artifact from the right collector but the wrong subkey
+    (not DataCollection) shouldn't fire T6."""
+    store = _store(tmp_path)
+    store.add_artifact(Artifact(
+        collector="windows.registry_persistence",
+        category="persistence",
+        subject="HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        data={
+            "hive": "HKLM",
+            "subkey":
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run",
+            "values": {"AllowTelemetry": 3},
+            "subkey_count": 0, "subkey_sample": [],
+        },
+    ))
+    findings = list(TelemetryJammerDetector().detect(store))
+    assert not [f for f in findings
+                if f.evidence.get("kind") == "telemetry_registry"]
     store.close()
 
 
