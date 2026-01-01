@@ -70,6 +70,7 @@ def _tags(finding: dict) -> list[str]:
         "shai_hulud":           ["attack.initial_access", "attack.supply_chain_compromise"],
         "supply_chain":         ["attack.initial_access", "attack.supply_chain_compromise"],
         "trapdoor":             ["attack.initial_access", "attack.supply_chain_compromise"],
+        "exfiltration":         ["attack.exfiltration"],
         "threat_actor":         ["attack.execution"],
         "env_hijack":           ["attack.privilege_escalation", "attack.defense_evasion"],
         "persistence_outlier": ["attack.persistence"],
@@ -981,6 +982,37 @@ _GENERATORS = {
     "c2":                   _gen_c2,
     "shai_hulud":           _gen_shai_hulud,
     "trapdoor":             _gen_trapdoor,
+    "exfiltration":         lambda f, *, case_id: (
+        {
+            "title": f["title"],
+            "description": f["summary"] +
+                            f"\n\nAuto-generated from digger finding {f['finding_uuid']}.",
+            **_shared(f, case_id=case_id, level=f.get("severity") or "high"),
+            "logsource": {"category": "process_creation"},
+            "detection": {
+                "selection": (
+                    {"CommandLine|re":
+                         r"(?:tar|zip|7z|gzip|xz)[^|]*\|[^|]*(?:curl|wget|nc|ncat|socat)"}
+                    if (f.get("evidence") or {}).get("kind") == "archive_pipe"
+                    else {"CommandLine|contains":
+                              (f.get("evidence") or {}).get("domain") or ""}
+                    if (f.get("evidence") or {}).get("kind") == "web_service_exfil"
+                    else {"CommandLine|contains":
+                              (f.get("evidence") or {}).get("pattern", "").split(" ")[0]}
+                    if (f.get("evidence") or {}).get("kind") in
+                        ("cloud_bucket_exfil", "protocol_tunnel")
+                    else {"CommandLine|re":
+                              r"(?:/\.ssh/|/\.aws/credentials|/etc/shadow|/\.kube/config)"
+                              r"[^|]*(?:curl|wget|nc\b|-Method\s+POST)"}
+                    if (f.get("evidence") or {}).get("kind") == "sensitive_post"
+                    else {"CommandLine|re":
+                              r"\b[A-Z2-7]{40,63}\.[A-Z2-7]{40,63}\b"}
+                ),
+                "condition": "selection",
+            },
+            "tags": ["attack.exfiltration", "attack.t1041", "attack.t1567"],
+        }
+    ),
     "env_hijack":           _gen_env_hijack,
     "persistence_outlier": _gen_persistence_outlier,
     "threat_actor":         _gen_threat_actor,

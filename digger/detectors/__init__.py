@@ -32,6 +32,7 @@ def all_detectors() -> list[Detector]:
     from digger.detectors.persistent_sessions import PersistentSessionDetector
     from digger.detectors.attacker_tooling import AttackerToolingDetector
     from digger.detectors.anti_forensics import AntiForensicsDetector
+    from digger.detectors.exfiltration import ExfiltrationDetector
     from digger.detectors.timeline import TimelineBuilder
     from digger.loki.detector import LokiStyleDetector
     from digger.memory.detector import MemoryAnomalyDetector
@@ -63,6 +64,7 @@ def all_detectors() -> list[Detector]:
         PersistentSessionDetector(),
         AttackerToolingDetector(),
         AntiForensicsDetector(),
+        ExfiltrationDetector(),
         LokiStyleDetector(),
         MemoryAnomalyDetector(),
         UnsignedBinaryDetector(),

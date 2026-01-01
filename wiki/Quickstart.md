@@ -69,6 +69,6 @@ digger investigate --case-dir ./case --report report.html
 
 ## What's next
 
-- [Detector catalog](Detector-Catalog) — 30 detectors, MITRE tags
+- [Detector catalog](Detector-Catalog) — 31 detectors, MITRE tags
 - [Threat intel feeds](Threat-Intel-Feeds) — what each feed adds
 - [Ethical contract FAQ](Ethics-FAQ) — why the contract refuses certain operations
