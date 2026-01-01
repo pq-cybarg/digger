@@ -40,6 +40,7 @@ def _common() -> list[Collector]:
     from digger.collectors.common.ssh_keys import SshKeysCollector
     from digger.collectors.common.github_workflows import GithubWorkflowsCollector
     from digger.collectors.common.service_versions import ServiceVersionsCollector
+    from digger.collectors.common.shell_profiles import ShellProfileCollector
     from digger.memory.collector import MemoryRegionsCollector
     from digger.signing.collector import CodeSigningCollector
     return [
@@ -58,6 +59,7 @@ def _common() -> list[Collector]:
         SshKeysCollector(),
         GithubWorkflowsCollector(),
         ServiceVersionsCollector(),
+        ShellProfileCollector(),
         MemoryRegionsCollector(),
         CodeSigningCollector(),
     ]
