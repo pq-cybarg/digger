@@ -602,6 +602,32 @@ def cmd_generate_sigma(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_art_update(args: argparse.Namespace) -> int:
+    from digger.art.harness import cache_dir, update_corpus
+    dest = Path(args.target).expanduser() if args.target else cache_dir()
+    print(f"[art] cloning / updating into {dest}", file=sys.stderr)
+    r = update_corpus(dest=dest)
+    if r["stdout"]:
+        print(r["stdout"], file=sys.stderr)
+    if r["returncode"] != 0:
+        print(f"git failed (rc={r['returncode']}): {r['stderr']}", file=sys.stderr)
+        return r["returncode"] or 1
+    print(f"[art] OK · cache at {r['dest']}", file=sys.stderr)
+    return 0
+
+
+def cmd_art_coverage(args: argparse.Namespace) -> int:
+    from digger.art.harness import (
+        build_coverage_matrix, coverage_report_json, coverage_report_text,
+    )
+    matrix = build_coverage_matrix()
+    if args.format == "json":
+        print(coverage_report_json(matrix))
+    else:
+        print(coverage_report_text(matrix))
+    return 0
+
+
 def cmd_generate_heatmap(args: argparse.Namespace) -> int:
     from digger.genrule.heatmap import (
         build_coverage, render_html, render_json, render_text, write_heatmap,
@@ -1171,6 +1197,33 @@ def build_parser() -> argparse.ArgumentParser:
     _add_case_arg(psig)
     psig.add_argument("--dirs", help="Comma-separated rule directories (default: digger/rules/sigma/)")
     psig.set_defaults(func=cmd_sigma_scan)
+
+    # ---- art / atomic-red-team ---- #
+    part = sub.add_parser(
+        "art",
+        help="Atomic Red Team coverage + sandbox-gated detector validation",
+    )
+    art_sub = part.add_subparsers(dest="art_cmd", required=True)
+
+    pau = art_sub.add_parser(
+        "update",
+        help="Clone or fast-forward redcanaryco/atomic-red-team into the cache",
+    )
+    pau.add_argument(
+        "--target",
+        help="Where to place the corpus (default: ~/.cache/digger/atomic-red-team)",
+    )
+    pau.set_defaults(func=cmd_art_update)
+
+    pac = art_sub.add_parser(
+        "coverage",
+        help="ART × digger coverage matrix (text / json output)",
+    )
+    pac.add_argument(
+        "--format", choices=("text", "json"), default="text",
+        help="Output format (default text)",
+    )
+    pac.set_defaults(func=cmd_art_coverage)
 
     # ---- loki / signature-base ---- #
     plok = sub.add_parser("loki", help="Neo23x0/signature-base (LOKI corpus) operations")
