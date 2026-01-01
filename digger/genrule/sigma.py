@@ -80,6 +80,8 @@ def _tags(finding: dict) -> list[str]:
         "macos_telemetry_jammer": ["attack.collection"],
         "linux_telemetry_jammer": ["attack.collection"],
         "browser_telemetry_jammer": ["attack.collection"],
+        "mini_shai_hulud":      ["attack.initial_access", "attack.supply_chain_compromise",
+                                  "attack.impact", "attack.persistence"],
         "threat_actor":         ["attack.execution"],
         "env_hijack":           ["attack.privilege_escalation", "attack.defense_evasion"],
         "persistence_outlier": ["attack.persistence"],
