@@ -56,6 +56,7 @@ def all_detectors() -> list[Detector]:
     from digger.detectors.macos_tcc import MacosTccDetector
     from digger.detectors.macos_launchd import MacosLaunchdDetector
     from digger.detectors.vscode_audit import VsCodeAuditDetector
+    from digger.detectors.browser_ext_perms import BrowserExtensionPermsDetector
     from digger.detectors.timeline import TimelineBuilder
     from digger.loki.detector import LokiStyleDetector
     from digger.memory.detector import MemoryAnomalyDetector
@@ -111,6 +112,7 @@ def all_detectors() -> list[Detector]:
         MacosTccDetector(),
         MacosLaunchdDetector(),
         VsCodeAuditDetector(),
+        BrowserExtensionPermsDetector(),
         LokiStyleDetector(),
         MemoryAnomalyDetector(),
         UnsignedBinaryDetector(),
