@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#
+# post-commit-cleanse — opsec hook that re-stamps the just-made
+# commit's author + committer dates to a fixed sentinel and touches
+# every tracked file's mtime to the same. Defeats timeline-
+# reconstruction forensics on the repo's filesystem footprint AND
+# on its commit metadata in one pass.
+#
+# Install via:  tools/opsec/install.sh
+# (Copies this file to .git/hooks/post-commit, chmod +x.)
+#
+# Configuration (env vars, all optional):
+#   DIGGER_CLEANSE_DATE    — ISO date / RFC2822 / "epoch +tz" for
+#                            commit metadata. Default: see DEFAULTS below.
+#   DIGGER_CLEANSE_TOUCH   — touch -t argument matching the above
+#                            (YYYYMMDDhhmm.SS, BSD touch).
+#   DIGGER_CLEANSE_DISABLE=1 — skip cleansing this invocation.
+#   DIGGER_CLEANSE_NORMALIZED=1 — internal recursion guard. Never
+#                                 set by hand; the hook sets it
+#                                 before re-firing `git commit
+#                                 --amend` to avoid infinite loop.
+#
+# Limitations (documented honestly):
+#   - macOS APFS file BIRTHTIME is NOT changed by `touch`. Real
+#     birthtime wiping needs copy → rm → mv-back (destroys inodes).
+#     Not done here — too destructive for a hook. Use a dedicated
+#     `tools/opsec/wipe-birthtimes.sh` (TODO) when you want full
+#     filesystem cleansing.
+#   - The local reflog still records real wallclock for HEAD@{N}
+#     entries. Reflog is private to the local repo and is GC'd
+#     after 30/90 days; for forensic-grade cleansing also expire
+#     the reflog: `git reflog expire --expire=now --all`.
+#   - Hook fires AFTER the commit object is written. Onlookers
+#     who race the few-ms window between `git commit` and the
+#     amend see the original timestamps. Not a real risk for
+#     local-only workflows.
+
+set -euo pipefail
+
+[[ "${DIGGER_CLEANSE_DISABLE:-0}" = "1" ]] && exit 0
+[[ "${DIGGER_CLEANSE_NORMALIZED:-0}" = "1" ]] && exit 0
+
+# DEFAULTS — round-number sentinel matching digger's project start year.
+# Override in your shell if you want a different normalized date.
+DATE="${DIGGER_CLEANSE_DATE:-2026-01-01T00:00:00+0000}"
+TOUCH="${DIGGER_CLEANSE_TOUCH:-202601010000.00}"
+
+# 1. Normalize working-tree mtime on every tracked file.
+#    Untracked files are skipped (likely build output / scratch).
+git ls-files -z 2>/dev/null \
+    | xargs -0 -I {} touch -t "$TOUCH" {} 2>/dev/null || true
+
+# 2. Re-stamp the just-committed commit. --no-verify skips
+#    pre-commit / commit-msg (the recursion-guard env var also
+#    short-circuits THIS post-commit hook). --no-edit keeps the
+#    original commit message verbatim.
+DIGGER_CLEANSE_NORMALIZED=1 \
+GIT_COMMITTER_DATE="$DATE" \
+    git commit --amend --no-edit --no-verify --date="$DATE" \
+        >/dev/null 2>&1 || true
