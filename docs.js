@@ -26,6 +26,13 @@
       { id: "browser-scanner",  href: "browser-scanner.html",  label: "Browser scanner" },
       { id: "chromium-unpatched", href: "chromium-unpatched.html", label: "Unpatched Chromium bugs" },
     ]},
+    { title: "Specialized auditors", items: [
+      { id: "idp",                href: "idp.html",                label: "IdP audit-log observability" },
+      { id: "slsa",               href: "slsa.html",               label: "SLSA provenance audit" },
+      { id: "android",            href: "android.html",            label: "Android forensics (adb)" },
+      { id: "mcp",                href: "mcp.html",                label: "MCP config audit" },
+      { id: "ci-workflow-audit",  href: "ci-workflow-audit.html",  label: "CI/CD workflow audit" },
+    ]},
     { title: "Threat intel", items: [
       { id: "intel",            href: "intel.html",            label: "Live feeds" },
       { id: "ai-triage",        href: "ai-triage.html",        label: "AI triage" },

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SLSA / in-toto provenance audit — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="slsa">
+<main>
+
+<h1>SLSA / in-toto provenance audit
+  <span class="subtitle">Local supply-chain auditor for npm + PyPI build attestations.</span>
+</h1>
+
+<p>Mini-Shai-Hulud beat SLSA L3 by compromising the GitHub-Actions
+runner that <em>produced</em> the attestation. The signature was real;
+the supply chain wasn't. digger's SLSA auditor walks every locally-
+installed npm and PyPI package, parses any attestation files shipped
+next to the install, and emits findings for missing, tampered,
+untrusted-builder, or source-mismatched provenance.</p>
+
+<h2>Strictly local</h2>
+
+<p>digger does <strong>not</strong> fetch the published package, talk
+to the registry, or download attestations. The operator fetches the
+attestation bundle once (<code>curl</code>,
+<code>gh attestation download</code>) and drops it next to the install
+for offline verification.</p>
+
+<h2>Attestation shapes parsed</h2>
+
+<ul class="kv">
+  <li>Bare in-toto statement (predicateType + subject + predicate)</li>
+  <li>DSSE envelope (base64-encoded payload)</li>
+  <li>Sigstore bundle (<code>{ "dsseEnvelope": {...} }</code> wrapper)</li>
+  <li>npm registry attestations-API response
+    (<code>{ "attestations": [{ "bundle": {...} }, ...] }</code>)</li>
+  <li>SLSA v1, v0.2, and v0.1 predicate shapes (builder.id, source
+    URI, subject sha256)</li>
+</ul>
+
+<h2>Where digger looks for attestations</h2>
+
+<ul class="kv">
+  <li><b>npm:</b>
+    <code>node_modules/&lt;pkg&gt;/.npm-attestation.json</code>,
+    <code>npm-attestation.json</code>,
+    <code>.sigstore-bundle.json</code>,
+    <code>sigstore-bundle.json</code></li>
+  <li><b>PyPI:</b>
+    <code>site-packages/&lt;pkg&gt;-&lt;ver&gt;.dist-info/PROVENANCE.json</code>,
+    <code>provenance.json</code>, <code>attestations.json</code></li>
+</ul>
+
+<h2>Detection layers (S1–S5)</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>What it catches</th><th>MITRE</th></tr></thead>
+  <tbody>
+    <tr><td>S1</td><td>info</td><td>No attestation shipped locally. Bulk of npm + PyPI still lacks provenance — for high-value deps, fetch from registry and drop next to install.</td><td>T1195.002</td></tr>
+    <tr><td>S2</td><td>high</td><td>Attestation present but unparseable. Tampering, toolchain bug, or schema drift — manual review.</td><td>T1195.002</td></tr>
+    <tr><td>S3</td><td>medium</td><td>Builder ID not on trusted-builder allowlist (github.com/actions/runner, slsa-github-generator, gh-action-pypi-publish, Cloud Build, GitLab Runner). Self-hosted may be legitimate — verify. Extend via <code>DIGGER_SLSA_TRUSTED_BUILDERS</code> env var.</td><td>T1195.002</td></tr>
+    <tr><td>S4</td><td>high</td><td>Manifest <code>repository.url</code> doesn't match the attestation's source URI. Typo-squat / maintainer-hijack fingerprint.</td><td>T1195.002</td></tr>
+    <tr><td>S5</td><td>medium</td><td>Predicate type is not a SLSA provenance predicate (SBOM, VEX, etc.). Useful but doesn't tell you who built the artifact.</td><td>T1195.002</td></tr>
+  </tbody>
+</table>
+
+<h2>CLI</h2>
+
+<pre><code>$ digger slsa audit --case-dir /tmp/case [--roots dir1,dir2] [--verbose]
+
+[slsa] packages audited: 412
+[slsa]   with attestation: 23
+[slsa]   parse errors:     0
+[slsa]   untrusted builder: 2
+[slsa] artifacts emitted: 412
+</code></pre>
+
+<p>Auto-discovery covers <code>~/node_modules</code>, the system
+site-packages, the user-site directory, and macOS-frameworks
+site-packages. Supply explicit <code>--roots</code> to scope.</p>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>

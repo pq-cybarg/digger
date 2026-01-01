@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IdP audit-log observability — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="idp">
+<main>
+
+<h1>IdP audit-log observability
+  <span class="subtitle">Okta / Entra / Workspace audit-log ingest + IdpSecurityDetector (MFA fatigue, OAuth phishing, impossible travel, password spray, federation tampering).</span>
+</h1>
+
+<p>Most modern breaches start above the host: MFA fatigue,
+consent-grant phishing, anomalous geo-velocity, admin role grants,
+Storm-0539 / Storm-0558 / Golden SAML federation tampering. digger's
+IdP module ingests the audit stream from your identity provider and
+runs the six canonical detection layers (I1–I6) against it.</p>
+
+<h2>Providers supported</h2>
+
+<ul class="kv">
+  <li><b>Okta</b> — System Log API NDJSON or JSON-array exports
+    (<code>--provider okta</code>)</li>
+  <li><b>Microsoft Entra</b> (Azure AD) — Sign-in + Audit logs
+    (<code>--provider entra</code> or <code>--provider azure</code>)</li>
+  <li><b>Google Workspace</b> — Admin SDK Reports API
+    (<code>--provider workspace</code> or <code>--provider google</code>)</li>
+</ul>
+
+<p>Event types are normalized into a digger-internal vocabulary
+(<code>auth</code> / <code>mfa_auth</code> / <code>mfa_denied</code> /
+<code>oauth_grant</code> / <code>admin_grant</code> /
+<code>federation_change</code> / <code>auth_failure</code>) so one rule
+set runs across all three. <code>ingest_file()</code> accepts both
+NDJSON (one event per line) and JSON-array files; supports actor /
+after-ts / before-ts / limit filters; caps log size at 4 GiB; truncates
+per-field at 8 KiB.</p>
+
+<h2>Detection layers (I1–I6)</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>What it catches</th><th>MITRE</th></tr></thead>
+  <tbody>
+    <tr><td>I1</td><td>high &rarr; critical</td><td>MFA fatigue: &ge;5 mfa_denied for one actor within a 10-min sliding window. Escalates to critical if a successful auth follows within 30 min (the actor caved to push-spam).</td><td>T1621</td></tr>
+    <tr><td>I2</td><td>high</td><td>OAuth consent grant — Storm-0539 / illicit-consent phishing vector. Verify the granted app + scope is expected.</td><td>T1098.001</td></tr>
+    <tr><td>I3</td><td>high</td><td>Admin / role-grant operation. Pair with the actor's auth history.</td><td>T1098</td></tr>
+    <tr><td>I4</td><td>critical</td><td>Impossible travel: same-actor country mismatch within 1 hour. No legitimate travel bridges the gap.</td><td>T1078.004</td></tr>
+    <tr><td>I5</td><td>critical</td><td>Password spray: &ge;10 failures from one src_ip across &ge;5 distinct actors in 10 min.</td><td>T1110.003</td></tr>
+    <tr><td>I6</td><td>critical</td><td>Federation / IdP-config change. New federated IdP / authentication domain is the Storm-0558 / Golden SAML persistence playbook.</td><td>T1556.007</td></tr>
+  </tbody>
+</table>
+
+<h2>CLI</h2>
+
+<pre><code>$ digger idp ingest \
+    --provider okta \
+    --log /path/to/okta-syslog.ndjson \
+    --case-dir /tmp/case \
+    [--actors alice@example.com,bob@example.com] \
+    [--after 1716000000] [--before 1716100000] \
+    [--limit 10000] [--verbose]
+
+[idp/okta] events: 12483 total, 12480 emitted, 3 skipped
+[idp/okta] elapsed: 0.8s
+
+Event-type distribution:
+  auth                              7421
+  mfa_auth                          3204
+  oauth_grant                         42
+  admin_grant                          9
+  federation_change                    1
+</code></pre>
+
+<p>Then run <code>digger scan</code> — IdpSecurityDetector executes
+automatically alongside the rest of the registry.</p>
+
+<h2>Tunables</h2>
+
+<p>Per-window thresholds are module constants in
+<code>digger.detectors.idp_security</code>: <code>MFA_FATIGUE_WINDOW_S</code> (600),
+<code>MFA_FATIGUE_MIN_DENIES</code> (5), <code>MFA_FATIGUE_FOLLOWUP_S</code>
+(1800), <code>IMPOSSIBLE_TRAVEL_WINDOW_S</code> (3600),
+<code>SPRAY_WINDOW_S</code> (600), <code>SPRAY_MIN_FAILURES</code> (10),
+<code>SPRAY_MIN_DISTINCT_ACTORS</code> (5). Adjust by editing the
+detector file — they're deliberately not env vars so a tuned threshold
+shows up in source review.</p>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>
