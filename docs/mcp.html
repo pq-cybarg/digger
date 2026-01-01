@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MCP configuration audit — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="mcp">
+<main>
+
+<h1>MCP configuration audit
+  <span class="subtitle">Model Context Protocol server auditor — flags tool-poisoning patterns in Claude Desktop / Claude Code / Cursor / Continue / Cline / Roo configs.</span>
+</h1>
+
+<p>LLM-agent tooling is the new attack surface. Every MCP server an
+agent loads runs as a subprocess with the host's privileges, <em>and</em>
+the tool catalog (descriptions, schemas) is dictated by the server —
+so a malicious MCP server has both shell access and a prompt-injection
+channel into the agent's reasoning. The 2025-2026 "tool poisoning"
+research thread shows this is being actively abused via typo-squatted
+npm packages, project-scoped <code>.mcp.json</code> files in malicious
+repos, and credential-leaking env-var inheritance.</p>
+
+<h2>Config locations searched</h2>
+
+<p>digger auto-discovers MCP configs at every well-known host location:</p>
+
+<ul class="kv">
+  <li><code>~/.config/Claude/claude_desktop_config.json</code>
+    (Linux Claude Desktop)</li>
+  <li><code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
+    (macOS)</li>
+  <li><code>~/AppData/Roaming/Claude/claude_desktop_config.json</code>
+    (Windows)</li>
+  <li><code>~/.claude/settings.json</code>,
+    <code>~/.claude.json</code> (Claude Code)</li>
+  <li><code>~/.cursor/mcp.json</code></li>
+  <li><code>~/.continue/config.json</code> +
+    <code>~/.config/io.continue.continue/config.json</code></li>
+  <li>Cline + Roo Code VSCode-extension globalStorage configs</li>
+  <li><strong>Project-scoped (always added):</strong>
+    <code>./.mcp.json</code>, <code>./.claude/settings.json</code>,
+    <code>./.cursor/mcp.json</code></li>
+</ul>
+
+<h2>Config shapes parsed</h2>
+
+<ul class="kv">
+  <li><code>{ "mcpServers": { name: {...}, ... } }</code>
+    (Claude Desktop, Cursor)</li>
+  <li><code>{ "mcp": { "servers": { name: {...}, ... } } }</code>
+    (newer Anthropic)</li>
+  <li><code>{ "mcpServers": [ { name: ..., ... }, ... ] }</code>
+    (some forks)</li>
+  <li><code>{ "servers": [...] }</code> (Continue)</li>
+</ul>
+
+<p>The package identifier is parsed out of <code>command</code> + args
+into <code>(ecosystem, identifier, scope)</code>: <code>npx</code> →
+npm; <code>uvx</code>/<code>pipx</code> → pypi;
+<code>node</code>/<code>python3</code> → raw script;
+<code>https://…</code> → network transport; otherwise binary.</p>
+
+<h2>Detection layers (P1–P5)</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>What it catches</th><th>MITRE</th></tr></thead>
+  <tbody>
+    <tr><td>P1</td><td>high</td><td>Project-scoped MCP server (<code>.mcp.json</code> in a repo). <code>git clone</code> + open is enough to enroll a server — same shape as the npm/pypi dropper attack.</td><td>T1195.002</td></tr>
+    <tr><td>P2</td><td>high</td><td>Raw script execution (<code>node /tmp/x.js</code>, <code>python3 server.py</code>, <code>./run.sh</code>). Whoever edits the file edits the MCP behavior, with no signature check.</td><td>T1059</td></tr>
+    <tr><td>P3</td><td>high</td><td>Credential-shape env vars (<code>AWS_*</code>, <code>GITHUB_TOKEN</code>, <code>*_API_KEY</code>, etc). Server inherits them at exec.</td><td>T1552.001</td></tr>
+    <tr><td>P4</td><td>medium</td><td>Network transport (sse / http / ws). Tool descriptions become an untrusted-input vector — prompt injection lands via the tool catalog.</td><td>T1071.001</td></tr>
+    <tr><td>P5</td><td>medium</td><td>Typo-squat-suspicious npm scope. Not on the KNOWN_GOOD_NPM_SCOPES allowlist (<code>@modelcontextprotocol</code>, <code>@anthropic-ai</code>, etc). Extend via <code>DIGGER_MCP_TRUSTED_SCOPES</code>.</td><td>T1195.002</td></tr>
+  </tbody>
+</table>
+
+<p>Disabled servers emit no findings.</p>
+
+<h2>CLI</h2>
+
+<pre><code>$ digger mcp audit --case-dir /tmp/case [--roots config1,config2] [--verbose]
+
+[mcp] MCP servers audited: 14
+[mcp]   project-scoped:    1
+[mcp]   with env vars:     6
+[mcp]   raw-script:        0
+[mcp]   network-transport: 2
+[mcp] artifacts emitted: 14
+</code></pre>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>

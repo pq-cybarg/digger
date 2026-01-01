@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CI/CD workflow audit — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="ci-workflow-audit">
+<main>
+
+<h1>CI/CD workflow audit
+  <span class="subtitle">GitHub Actions workflow auditor — W1-W7 covering pwn-request, workflow_run from forks, script-injection interpolations, unpinned third-party actions, persist-credentials, write-all permissions, self-modifying workflows.</span>
+</h1>
+
+<p>CI/CD is the highest-leverage attack surface in modern development.
+A compromised workflow runs with secrets, publishes to package
+registries, and re-keys the production environment. The 2024-2026
+attack record (Shai-Hulud, Tj-actions/changed-files, Adam Berman's
+pwn-request catalog, GitGuardian self-replicating workflows)
+documents the canonical malicious patterns; this detector codifies
+them as W1-W7 rules.</p>
+
+<h2>What gets parsed</h2>
+
+<p>The auditor walks <code>.github/workflows/*.yml</code> under any
+root (defaults to <code>cwd</code>) and parses each workflow as YAML.
+Per workflow it extracts:</p>
+
+<ul class="kv">
+  <li><code>on</code> triggers (handles the YAML-keyword <code>on:</code> &rarr; <code>True</code> quirk)</li>
+  <li>per-job step count and runs-on</li>
+  <li>per-step <code>uses:</code> parsed into <code>(owner, repo, ref, sha_pinned, is_trusted_owner, is_local)</code></li>
+  <li>per-step <code>run:</code> scanned for injectable <code>${{ ... }}</code> contexts from the 14-context allowlist</li>
+  <li><code>persist-credentials: true</code> on checkout</li>
+  <li><code>secrets.*</code> references in <code>run:</code> / <code>env:</code></li>
+  <li>self-modifying signature (any step writes to <code>.github/workflows/</code>)</li>
+  <li>top-level <code>permissions:</code> block (<code>"write-all"</code> / <code>"default"</code> / <code>"object"</code>)</li>
+</ul>
+
+<h2>Trusted-owner allowlist</h2>
+
+<p>Actions from these owners are <em>not</em> flagged as unpinned-
+third-party even if they use a moving tag:</p>
+
+<p><code>actions</code>, <code>github</code>, <code>azure</code>,
+<code>docker</code>, <code>google-github-actions</code>,
+<code>aws-actions</code>, <code>anthropic-experimental</code>,
+<code>anthropics</code>, <code>hashicorp</code>,
+<code>actions-rs</code>, <code>advanced-security</code>,
+<code>code-scanning</code>.</p>
+
+<p>Operators extend via <code>DIGGER_CI_TRUSTED_ACTION_OWNERS</code>
+(comma-separated).</p>
+
+<h2>Detection layers (W1–W7)</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>What it catches</th><th>MITRE</th></tr></thead>
+  <tbody>
+    <tr><td>W1</td><td>critical</td><td>Pwn-request: <code>pull_request_target</code> + checkout of PR head ref. Documented by GitHub Security Lab — the canonical CI compromise pattern.</td><td>T1199</td></tr>
+    <tr><td>W2</td><td>high</td><td><code>workflow_run</code> trigger. Re-runs in privileged context with access to the originating workflow's artifacts (often fork-PR test runs).</td><td>T1199</td></tr>
+    <tr><td>W3</td><td>high</td><td>Untrusted-input interpolation in <code>run:</code> block (PR title, issue body, comment body, head_ref, commit message). Script injection by anyone who can submit content.</td><td>T1059</td></tr>
+    <tr><td>W4</td><td>medium</td><td>Unpinned third-party action (moving tag, not trusted owner). The Tj-actions/changed-files compromise shape.</td><td>T1195.002</td></tr>
+    <tr><td>W5</td><td>medium</td><td><code>persist-credentials: true</code> after checkout — GITHUB_TOKEN baked into <code>.git/config</code> for the rest of the run.</td><td>T1552.001</td></tr>
+    <tr><td>W6</td><td>medium / info</td><td>Top-level <code>permissions:</code> = <code>write-all</code> (medium) or no block at all (info — legacy org default).</td><td>T1078.004</td></tr>
+    <tr><td>W7</td><td>critical</td><td>Self-modifying workflow — any step writes to <code>.github/workflows/</code>. The worm-persistence primitive (Shai-Hulud, octofiles).</td><td>T1195.002</td></tr>
+  </tbody>
+</table>
+
+<p>A workflow file that the GitHub runner accepts but a YAML parser
+rejects produces a <code>workflow_parse_error</code> finding —
+itself a smell.</p>
+
+<h2>CLI</h2>
+
+<pre><code>$ digger ci audit-workflows --case-dir /tmp/case [--roots .,vendor/repo-a]
+
+[ci] workflows audited: 12
+[ci]   pwn-request pattern:        0
+[ci]   workflow_run-triggered:     1
+[ci]   injectable interpolations:  2
+[ci]   unpinned 3rd-party actions: 4
+[ci]   self-modifying:             0
+[ci] artifacts emitted: 12
+</code></pre>
+
+<h2>Fixing W3 (the common one)</h2>
+
+<p>Replace the interpolation with an env var binding and quote-safe
+shell. The bash interpreter sees a literal variable, not a templated
+string:</p>
+
+<pre><code>- run: |
+    # WRONG — script injection via PR title:
+    echo "${{ github.event.pull_request.title }}"
+
+- run: |
+    echo "$PR_TITLE"
+  env:
+    PR_TITLE: ${{ github.event.pull_request.title }}
+</code></pre>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>
