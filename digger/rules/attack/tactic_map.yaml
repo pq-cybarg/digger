@@ -127,6 +127,10 @@ techniques:
   T1518.001: [discovery]
 
   # Lateral Movement
+  T1080:     [lateral-movement]
+  T1563:     [lateral-movement]
+  T1563.001: [lateral-movement]
+  T1563.002: [lateral-movement]
   T1021:     [lateral-movement]
   T1021.001: [lateral-movement]
   T1021.002: [lateral-movement]
