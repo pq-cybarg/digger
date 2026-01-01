@@ -77,6 +77,7 @@ def _tags(finding: dict) -> list[str]:
                                   "attack.command_and_control"],
         "telemetry_jammer":     ["attack.collection"],
         "warbird_blocker":      ["attack.execution"],
+        "macos_telemetry_jammer": ["attack.collection"],
         "threat_actor":         ["attack.execution"],
         "env_hijack":           ["attack.privilege_escalation", "attack.defense_evasion"],
         "persistence_outlier": ["attack.persistence"],
