@@ -746,6 +746,36 @@ def cmd_k8s_collect(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_vscode_audit(args: argparse.Namespace) -> int:
+    from digger.vscode import audit_vscode, emit_records_to_store
+    store = EvidenceStore(args.case_dir)
+    try:
+        roots = ([r.strip() for r in args.roots.split(",") if r.strip()]
+                  if args.roots else None)
+        audit = audit_vscode(roots=roots)
+        emitted = emit_records_to_store(audit, store)
+        sideloaded = sum(
+            1 for e in audit.extensions
+            if e.is_marketplace_install is False
+        )
+        risky_settings = sum(
+            1 for s in audit.settings
+            if (s.workspace_trust_enabled is False
+                or s.http_proxy_strict_ssl is False
+                or s.workspace_trust_untrusted_files == "open"
+                or s.custom_default_shell)
+        )
+        print(f"[vscode] extensions audited: {len(audit.extensions)}")
+        print(f"[vscode]   sideloaded:    {sideloaded}")
+        print(f"[vscode] settings files audited: "
+              f"{len(audit.settings)}")
+        print(f"[vscode]   with risky keys: {risky_settings}")
+        print(f"[vscode] artifacts emitted: {emitted}")
+    finally:
+        store.close()
+    return 0
+
+
 def cmd_git_audit_hooks(args: argparse.Namespace) -> int:
     from digger.git_audit import audit_git_repos, emit_records_to_store
     store = EvidenceStore(args.case_dir)
@@ -1893,6 +1923,28 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Comma-separated repo / parent-dir paths "
                           "(default: cwd)")
     pga.set_defaults(func=cmd_git_audit_hooks)
+
+    pv = sub.add_parser(
+        "vscode",
+        help="VS Code / Cursor / Code-Insiders extension + "
+             "user-settings auditor. Sideloaded extensions, "
+             "untrusted publishers, workspace-trust disablement, "
+             "MITM-permissive proxy, shell hijacks, project-"
+             "scoped .vscode/settings.json with risky keys.",
+    )
+    v_sub = pv.add_subparsers(dest="vscode_cmd", required=True)
+
+    pva = v_sub.add_parser(
+        "audit",
+        help="Walk every ~/.vscode/extensions/* and parse every "
+             "user + project settings.json. Emits one Artifact "
+             "per extension + one per settings file.",
+    )
+    _add_case_arg(pva)
+    pva.add_argument("--roots",
+                     help="Comma-separated extension-dir roots "
+                          "to scan (default: auto-discover)")
+    pva.set_defaults(func=cmd_vscode_audit)
 
     pp = sub.add_parser(
         "plaso",
