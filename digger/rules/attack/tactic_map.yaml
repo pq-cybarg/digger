@@ -124,7 +124,24 @@ techniques:
 
   # Collection
   T1056:     [collection, credential-access]
+  T1056.001: [collection, credential-access]
+  T1113:     [collection]
+  T1114:     [collection]
+  T1114.001: [collection]
+  T1114.002: [collection]
+  T1114.003: [collection]
+  T1115:     [collection]
+  T1123:     [collection]
+  T1125:     [collection]
   T1185:     [collection]
+  T1213:     [collection]
+  T1213.003: [collection]
+  T1530:     [collection]
+  T1552.007: [credential-access]
+  T1557:     [credential-access, collection]
+  T1557.001: [credential-access, collection]
+  T1557.002: [credential-access, collection]
+  T1560:     [collection]
   T1176:     [persistence]
 
   # Command and Control

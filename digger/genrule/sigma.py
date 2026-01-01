@@ -72,6 +72,7 @@ def _tags(finding: dict) -> list[str]:
         "trapdoor":             ["attack.initial_access", "attack.supply_chain_compromise"],
         "exfiltration":         ["attack.exfiltration"],
         "impact":               ["attack.impact"],
+        "collection":           ["attack.collection"],
         "threat_actor":         ["attack.execution"],
         "env_hijack":           ["attack.privilege_escalation", "attack.defense_evasion"],
         "persistence_outlier": ["attack.persistence"],
@@ -983,6 +984,20 @@ _GENERATORS = {
     "c2":                   _gen_c2,
     "shai_hulud":           _gen_shai_hulud,
     "trapdoor":             _gen_trapdoor,
+    "collection":           lambda f, *, case_id: {
+        "title": f["title"],
+        "description": f["summary"] +
+                        f"\n\nAuto-generated from digger finding {f['finding_uuid']}.",
+        **_shared(f, case_id=case_id, level=f.get("severity") or "high"),
+        "logsource": {"category": "process_creation"},
+        "detection": {
+            "selection": {"CommandLine|contains":
+                              ((f.get("evidence") or {}).get("pattern") or "")
+                              .split(" ")[0:2]},
+            "condition": "selection",
+        },
+        "tags": ["attack.collection", "attack.t1056"],
+    },
     "impact":               lambda f, *, case_id: (
         {
             "title": f["title"],
