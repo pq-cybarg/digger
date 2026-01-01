@@ -1,7 +1,7 @@
 # digger
 
 **Cross-platform endpoint forensics suite. Runs entirely on your machine.
-Codified ethics, post-quantum signed evidence, 31 detectors including a
+Codified ethics, post-quantum signed evidence, 32 detectors including a
 defensive mirror of every offensive-tooling kill-chain phase.**
 
 [![docs](https://img.shields.io/badge/docs-pq--cybarg.github.io%2Fdigger-2ea44f)](https://pq-cybarg.github.io/digger/)
@@ -30,7 +30,7 @@ defensive mirror of every offensive-tooling kill-chain phase.**
 
 `digger` walks into a host, pulls hundreds of forensic artifacts into an
 **append-only, dual-hash-chained, post-quantum-signable SQLite evidence
-store**, runs a stack of 31 detectors over them, and produces case
+store**, runs a stack of 32 detectors over them, and produces case
 reports suitable for legal disclosure, SOC handoff, or internal
 incident-response review. Every step is observation-only: it never
 modifies the system it's investigating without explicit, audited
@@ -55,7 +55,7 @@ Or one-shot: `digger investigate --case-dir ./case --report report.html`.
 | **Ethical contract enforced in code** | 10 principles (`digger.ethics.contract`) raise `EthicsViolation` rather than warning. 19 load-bearing tests fail if a guardrail is removed. See [ETHICS.md](ETHICS.md). |
 | **Dual hash chain on every record** | SHA-256 *and* SHA3-256 threaded through artifacts + findings tables in parallel. Forging tampering requires breaking both algorithm families simultaneously (Merkle-Damgård + Keccak sponge). |
 | **Post-quantum signed evidence** | ML-DSA-65 (FIPS 204) signature over the chain tip via liboqs. FIPS 140-3 mode with KATs for SHA-256, AES-256-GCM, ML-DSA-65, ML-KEM-768. |
-| **11 Decepticon countermeasures** | One defensive detector per offensive kill-chain phase (recon → exploitation → privesc → lateral → AD → cloud → counter-RE → persistent sessions → attacker tooling → anti-forensics → exfiltration). |
+| **12 Decepticon countermeasures** | One defensive detector per offensive kill-chain phase (recon → exploitation → privesc → lateral → AD → cloud → counter-RE → persistent sessions → attacker tooling → anti-forensics → exfiltration → impact). |
 | **15 live threat-intel feeds** | CISA KEV, abuse.ch (URLhaus/ThreatFox/MalwareBazaar), Spamhaus, OpenSSF, GitHub Advisory DB, NVD CPE-keyed CVEs, SigmaHQ rule corpus, MITRE ATT&CK STIX, Aikido Shai-Hulud IOCs. Statically-enforced "live-first" convention: no detector ships consuming only hand-typed seed data. |
 | **AI triage under IC tradecraft** | OpenAI-compatible local LLM (llama.cpp / ollama / vllm). Schema-enforced output under ICD 203 estimative probability + NATO Admiralty source/info reliability + TLP. The LLM never sees raw file contents. |
 | **18 compliance frameworks** | NIST 800-53, NIST 800-171, SOC 2, ISO 27001, ISO 27037, CIS, CMMC L1/L2, PCI-DSS, HIPAA, GDPR, FedRAMP, FFIEC, NIS2. Adding a framework is one YAML file. |
@@ -122,7 +122,7 @@ firewall rules) require it.
 
 ## The Decepticon countermeasure suite
 
-Eleven detectors that mirror — and counter — every phase of the autonomous
+Twelve detectors that mirror — and counter — every phase of the autonomous
 red-team kill chain ([PurpleAILAB/Decepticon](https://github.com/PurpleAILAB/Decepticon)):
 
 | Phase | digger detector | MITRE |
@@ -139,6 +139,7 @@ red-team kill chain ([PurpleAILAB/Decepticon](https://github.com/PurpleAILAB/Dec
 | Attacker tooling on host | `attacker_tooling` | T1588.002 |
 | Anti-forensics / track-covering | `anti_forensics` | T1070 / T1070.001-006 |
 | Exfiltration | `exfiltration` | T1041 / T1048 / T1567 / T1572 |
+| Impact (ransomware / destruction) | `impact` | T1485 / T1486 / T1489 / T1490 / T1529 / T1561 |
 
 All are observation-only: digger never sends a payload to verify
 exploitability (P3 of the ethical contract). Each detector ships a generic

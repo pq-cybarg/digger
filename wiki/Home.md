@@ -11,7 +11,7 @@ kill-chain phase.
 ## Wiki pages
 
 - [Quickstart](Quickstart) — install + first scan in 5 minutes
-- [Detector catalog](Detector-Catalog) — all 31 detectors, what they look for, MITRE tags
+- [Detector catalog](Detector-Catalog) — all 32 detectors, what they look for, MITRE tags
 - [Threat intel feeds](Threat-Intel-Feeds) — all 15 feeds, cadences, what they backstop
 - [Ethical contract FAQ](Ethics-FAQ) — why each principle exists + what it blocks
 - [FAQ](FAQ) — common questions

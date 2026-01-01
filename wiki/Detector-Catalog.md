@@ -1,6 +1,6 @@
 # Detector catalog
 
-All 31 detectors registered in `digger/detectors/__init__.py:all_detectors()`.
+All 32 detectors registered in `digger/detectors/__init__.py:all_detectors()`.
 
 Severity ladders: `info` · `low` · `medium` · `high` · `critical`.
 
@@ -30,7 +30,7 @@ Severity ladders: `info` · `low` · `medium` · `high` · `critical`.
 | `sigma` | (Optional, run separately) match collected artifacts against Sigma rules | varies |
 | `timeline` | Synthesize chronological event timeline (runs last) | — |
 
-## Decepticon countermeasures (11)
+## Decepticon countermeasures (12)
 
 One defensive detector per offensive kill-chain phase. All
 observation-only.
@@ -48,6 +48,7 @@ observation-only.
 | `attacker_tooling` | Tooling on host | 60+ red-team tools across 10 categories. Three detection modes: T1 running process, T2 installed package (brew/dpkg/rpm/snap/flatpak/Windows uninstall), T3 deployment artifact on disk — catches git-clone + docker-compose'd kits like Z3r0, Decepticon, Mythic, Sliver, Havoc, Empire, Metasploit even when nothing is running. Self-attribution downgrades severity for dev-clone / venv paths. | T1588.002 |
 | `anti_forensics` | Covering tracks | Shell history wiping (history -c, HISTFILE=/dev/null, ~/.bash_history symlinked to /dev/null); Unix log truncation (truncate -s 0 /var/log/, journalctl --vacuum-time=1s, rm /var/log/auth.log); Windows event log clearing (wevtutil cl, Clear-EventLog); timestomping (touch -t / --reference, SetCreationTime); secure-deletion tooling (shred / srm / sdelete / wipe); tmpfs RAM-only pivots. 10th Decepticon countermeasure. | T1070, T1070.001-.006 |
 | `exfiltration` | Exfiltration | Archive-then-exfil pipes (tar/zip/7z piped to curl/wget/nc); cloud-bucket cp/sync (aws s3 / gsutil / azcopy / rclone / b2 / mc); paste-bin and anonymous file-drop uploads (pastebin / transfer.sh / file.io / 0x0.st / anonfiles / bashupload); chat-webhook exfil (Slack / Discord / Telegram / webhook.site); GitHub gist creation (T1567.001); protocol-tunneling tools (dnscat2 / iodine / dns2tcp / dnsteal / chisel / ngrok / frp / cloudflared / stunnel / socat-LISTEN / serveo; ssh -R/-D/-L port-forward); sensitive-target read + network-upload primitive (SSH key / AWS creds / kubeconfig / Keychain / browser logins piped to curl/wget/nc/-Method POST/bash > /dev/tcp); DNS-tunnel-shaped labels (two adjacent 40+ char base32 labels). Self-attribution downgrades severity when tunnel binaries live in a user-local install path. 11th Decepticon countermeasure. | T1041, T1048, T1048.003, T1567, T1567.001, T1567.002, T1572 |
+| `impact` | Impact (ransomware / destruction) | Ransomware encrypt-shapes (`find -exec openssl enc`, `gpg --batch --encrypt --recursive`, `7z -p -mhe -r`, `cipher /e`); known ransom-note filenames (HOW_TO_DECRYPT / _readme.txt / info.hta / lockbit-decryptor / akira_readme / ryukreadme / etc.); mass-rename footprint (≥50 files sharing a known ransomware extension `.encrypted` / `.locked` / `.wcry` / `.lockbit` / etc.); shadow-copy / system-restore deletion (vssadmin delete shadows, wmic shadowcopy delete, bcdedit recoveryenabled No, wbadmin delete catalog, Disable-ComputerRestore); security-service stop / EDR-tamper (systemctl/service stop on falcon-sensor/sentinelone/sophos/defender; net/sc/Stop-Service on WinDefend/Sense/CSFalconSvc/Sysmon; Set-MpPreference -DisableRealtimeMonitoring; Add-MpPreference -ExclusionPath; launchctl unload on macOS agents); disk wipe (`dd if=/dev/zero of=/dev/sdX`, `shred /dev/`, `wipefs -af`, `mkfs -F`, `parted mklabel`, `diskpart clean`, `format C: /q /y`); system shutdown/reboot (`shutdown -h now`, Stop-Computer -Force, halt/poweroff/init 0); cloud destruction (`aws ec2 terminate-instances`, `aws s3 rb --force`, `aws rds delete-db-instance --skip-final-snapshot`, `aws cloudtrail stop-logging`, `gcloud compute instances delete --quiet`, `az vm delete --yes`, `kubectl delete --all`, `terraform destroy -auto-approve`). 12th and final Decepticon countermeasure. | T1485, T1486, T1489, T1490, T1529, T1561, T1562.001, T1562.008 |
 
 Full walkthrough: [docs/decepticon-counter](https://pq-cybarg.github.io/digger/decepticon-counter.html).
 
