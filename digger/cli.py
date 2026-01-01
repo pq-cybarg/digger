@@ -404,6 +404,35 @@ def cmd_export_misp(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export_elk(args: argparse.Namespace) -> int:
+    from digger.exchange.elk import ElkExporter
+    store = EvidenceStore(args.case_dir)
+    try:
+        case_id = str(store.get_meta("case_id") or "")
+        host = store.get_meta("host") or {}
+        host_name = args.host_name or (
+            (host.get("node") if isinstance(host, dict) else "") or ""
+        )
+        out = args.out or (Path(args.case_dir) / "elk.ndjson")
+        exporter = ElkExporter(
+            findings_index=args.findings_index,
+            artifacts_index=args.artifacts_index,
+        )
+        n = exporter.write_file(
+            store, out,
+            case_id=case_id, host_name=host_name,
+            include_artifacts=not args.no_artifacts,
+        )
+        print(f"wrote {n} NDJSON lines: {out}")
+        print(
+            f"  ingest: curl -X POST '<es>:9200/_bulk' "
+            f"-H 'Content-Type: application/x-ndjson' --data-binary @{out}"
+        )
+    finally:
+        store.close()
+    return 0
+
+
 def cmd_export_attack(args: argparse.Namespace) -> int:
     from digger.exchange import to_navigator_layer
     store = EvidenceStore(args.case_dir)
@@ -1247,6 +1276,20 @@ def build_parser() -> argparse.ArgumentParser:
     pmi.add_argument("--out")
     pmi.add_argument("--tlp", default="TLP:AMBER")
     pmi.set_defaults(func=cmd_export_misp)
+
+    pel = exp_sub.add_parser(
+        "elk",
+        help="ELK / OpenSearch _bulk NDJSON for ingestion via curl POST /_bulk",
+    )
+    _add_case_arg(pel)
+    pel.add_argument("--out", help="Output file path (default: <case>/elk.ndjson)")
+    pel.add_argument("--findings-index", default="digger-findings")
+    pel.add_argument("--artifacts-index", default="digger-artifacts")
+    pel.add_argument("--no-artifacts", action="store_true",
+                     help="Emit only findings, not the full artifact corpus")
+    pel.add_argument("--host-name", default="",
+                     help="Override host.name field (defaults to case meta)")
+    pel.set_defaults(func=cmd_export_elk)
 
     pat = exp_sub.add_parser("attack-navigator", help="MITRE ATT&CK Navigator layer JSON")
     _add_case_arg(pat)
