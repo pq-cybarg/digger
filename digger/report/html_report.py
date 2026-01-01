@@ -133,6 +133,21 @@ def render_html(store: EvidenceStore) -> str:
                      + "'>" + sev + ": " + str(counts["by_severity"].get(sev, 0)) + "</div>")
     parts.append("</section>")
 
+    # ---- Storyline section (Aftermath-style narrative reconstruction) ---- #
+    try:
+        from digger.report.storyline import (
+            build_storylines, render_storyline_html,
+        )
+        storylines = build_storylines(findings=findings)
+        # Only render when at least one cluster has >1 finding —
+        # singleton chains add no narrative value
+        meaningful = [s for s in storylines if len(s.findings) > 1]
+        if meaningful:
+            parts.append(render_storyline_html(meaningful, top_n=10))
+    except Exception:
+        # Storyline synthesis is best-effort; never block the report
+        pass
+
     parts.append("<section class='controls'>")
     parts.append("<input id='filter' type='text' placeholder='filter findings by text…'>")
     parts.append("<select id='sev'>")
