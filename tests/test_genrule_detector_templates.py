@@ -21,11 +21,29 @@ _REQUIRED_DETECTORS = {
     "attacker_tooling",
 }
 
+# Foundational detectors that also have clean Sigma mappings — added as
+# the per-detector template surface expanded post-v0.1.0.
+_ALSO_REQUIRED = {
+    "lolbins", "suspicious_processes", "c2", "env_hijack",
+}
+
 
 def test_every_required_detector_implements_to_sigma_template():
     impl = {d.name for d in all_detectors() if d.to_sigma_template() is not None}
     missing = _REQUIRED_DETECTORS - impl
     assert not missing, f"detectors missing to_sigma_template(): {missing}"
+
+
+def test_foundational_detectors_also_have_templates():
+    """Beyond the 9 Decepticon countermeasures, the foundational
+    detectors with clean Sigma mappings should ship templates too —
+    so `digger generate sigma --from-detectors` covers the full
+    SIEM-deployable surface, not just the counter-offensive subset."""
+    impl = {d.name for d in all_detectors() if d.to_sigma_template() is not None}
+    missing = _ALSO_REQUIRED - impl
+    assert not missing, (
+        f"foundational detectors missing to_sigma_template(): {missing}"
+    )
 
 
 def test_generate_detector_templates_returns_valid_dicts():

@@ -47,6 +47,58 @@ class SuspiciousProcessDetector(Detector):
     name = "suspicious_processes"
     description = "Heuristics over the process tree."
 
+    def to_sigma_template(self) -> dict:
+        return {
+            "title": "Suspicious process spawn: browser-spawns-shell or interpreter-in-temp",
+            "id": "digger-suspicious-processes-template",
+            "description": (
+                "Process-tree heuristics covering: shell spawned by a "
+                "browser (post-RCE pattern); interpreter run from a drop "
+                "location like /tmp or %TEMP%; PowerShell with "
+                "-EncodedCommand carrying a long base64 payload; "
+                "pipe-to-shell download cradles."
+            ),
+            "status": "experimental",
+            "author": "digger",
+            "logsource": {"category": "process_creation"},
+            "detection": {
+                "selection_browser_to_shell": {
+                    "ParentImage|endswith": [
+                        "/chrome", "/chrome.exe", "/msedge.exe",
+                        "/firefox", "/firefox-bin", "/safari", "/brave",
+                        "/brave-browser",
+                    ],
+                    "Image|endswith": [
+                        "/sh", "/bash", "/zsh", "/dash",
+                        "/cmd.exe", "/powershell.exe", "/pwsh.exe",
+                    ],
+                },
+                "selection_interpreter_in_tmp": {
+                    "Image|endswith": [
+                        "/python", "/python3", "/perl", "/ruby", "/node",
+                    ],
+                    "Image|contains": [
+                        "/tmp/", "/var/tmp/", "/dev/shm/",
+                        "\\Temp\\", "\\AppData\\Local\\Temp\\",
+                    ],
+                },
+                "selection_powershell_encoded": {
+                    "Image|endswith": ["/powershell.exe", "/pwsh.exe"],
+                    "CommandLine|re": r"-(?:enc|encodedcommand|e)\s+[A-Za-z0-9+/=]{40,}",
+                },
+                "selection_pipe_to_shell": {
+                    "CommandLine|re": (
+                        r"\b(?:curl|wget)\s+\S+\s*\|\s*"
+                        r"(?:sh|bash|zsh|python|perl|ruby|iex)\b"
+                    ),
+                },
+                "condition": "1 of selection_*",
+            },
+            "level": "high",
+            "tags": ["attack.t1059", "attack.t1059.001", "attack.t1105",
+                    "attack.execution", "attack.initial_access"],
+        }
+
     def detect(self, store: EvidenceStore) -> Iterable[Finding]:
         procs = list(store.iter_artifacts(collector="processes"))
         by_pid = {a["data"].get("pid"): a for a in procs if a["data"].get("pid")}

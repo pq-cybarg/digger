@@ -13,6 +13,34 @@ class EnvHijackDetector(Detector):
     name = "env_hijack"
     description = "Hijack vars present in env or process environment."
 
+    def to_sigma_template(self) -> dict:
+        return {
+            "title": "Dynamic-linker or shell-init environment hijack variable set",
+            "id": "digger-env-hijack-template",
+            "description": (
+                "LD_PRELOAD, DYLD_INSERT_LIBRARIES, LD_AUDIT (linker "
+                "hijack), or PROMPT_COMMAND / BASH_ENV / ENV (shell-init "
+                "hook) present in a process environment. Almost never "
+                "legitimate on user desktops; classic persistence + "
+                "library-side-loading primitive."
+            ),
+            "status": "experimental",
+            "author": "digger",
+            "logsource": {"category": "process_creation"},
+            "detection": {
+                "selection": {
+                    "EnvironmentVariables|contains": [
+                        "LD_PRELOAD=", "DYLD_INSERT_LIBRARIES=",
+                        "LD_AUDIT=", "PROMPT_COMMAND=", "BASH_ENV=",
+                    ],
+                },
+                "condition": "selection",
+            },
+            "level": "high",
+            "tags": ["attack.t1574.006", "attack.t1546.004",
+                    "attack.persistence", "attack.privilege_escalation"],
+        }
+
     def detect(self, store: EvidenceStore) -> Iterable[Finding]:
         for art in store.iter_artifacts(collector="env", category="environment"):
             if art["subject"] != "interesting":
