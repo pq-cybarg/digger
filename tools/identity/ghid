@@ -1,0 +1,460 @@
+#!/usr/bin/env bash
+#
+# ghid — GitHub IDentity manager for hosts with multiple GH accounts.
+#
+# Solves the multi-identity SSH problem: prevents accidental pushes /
+# fetches under the wrong account, locks repos to specific identities,
+# verifies the identity actually matches what GitHub sees, and rewrites
+# `git@github.com:owner/repo.git` URLs to identity-aliased SSH URLs.
+#
+# Assumes ~/.ssh/config has `Host github-<identity>` aliases — one per
+# identity, each pointing at a dedicated SSH key. Run `ghid doctor` to
+# check.
+#
+# Subcommands:
+#   ghid list                  — list configured identities + verify each
+#   ghid doctor                — sanity-check ~/.ssh/config + keys
+#   ghid current               — show current repo's bound identity
+#   ghid switch <identity>     — rewrite this repo's remotes to use <identity>
+#   ghid lock <identity>       — bind this repo to <identity> via pre-push hook
+#   ghid unlock                — remove the binding
+#   ghid verify [<identity>]   — confirm ssh -T resolves to expected user
+#   ghid whoami                — quick: who would `git push` from this repo be?
+#   ghid new <identity>        — create a new key + SSH alias for <identity>
+#
+# Why it exists: GitHub identifies SSH-authenticated users by key
+# fingerprint. The `User <name>` field in ~/.ssh/config is cosmetic and
+# does NOT change which GitHub account a push lands under. Multi-
+# identity hosts where every block uses `Host github.com` will silently
+# auth EVERY operation as whichever identity comes first in the file.
+# ghid forces explicit identity-aliased URLs (e.g.
+# git@github-pqcybarg:owner/repo.git) and provides the safety nets so
+# the wrong identity can't slip through.
+
+set -euo pipefail
+
+SSH_CONFIG="${SSH_CONFIG:-$HOME/.ssh/config}"
+IDENTITY_PREFIX="github-"
+
+# ---- helpers ---- #
+
+c_red()    { printf "\033[31m%s\033[0m" "$*"; }
+c_grn()    { printf "\033[32m%s\033[0m" "$*"; }
+c_yel()    { printf "\033[33m%s\033[0m" "$*"; }
+c_dim()    { printf "\033[2m%s\033[0m" "$*"; }
+c_bold()   { printf "\033[1m%s\033[0m" "$*"; }
+ok()       { echo "  $(c_grn ✓) $*"; }
+warn()     { echo "  $(c_yel ⚠) $*"; }
+err()      { echo "  $(c_red ✗) $*" >&2; }
+die()      { err "$*"; exit 1; }
+
+in_git_repo() { git rev-parse --git-dir >/dev/null 2>&1; }
+
+# Parse ~/.ssh/config and emit one line per `Host github-*` alias:
+#   github-pqcybarg|/Users/me/.ssh/pq-cybarg-GitHub
+list_aliases() {
+    [[ -f "$SSH_CONFIG" ]] || return 0
+    awk -v pfx="$IDENTITY_PREFIX" '
+        tolower($1) == "host" {
+            cur_host = ""
+            for (i = 2; i <= NF; ++i) {
+                if (index($i, pfx) == 1) { cur_host = $i; break }
+            }
+            cur_key = ""
+            next
+        }
+        cur_host != "" && tolower($1) == "identityfile" {
+            cur_key = $2
+            print cur_host "|" cur_key
+            cur_host = ""
+        }
+    ' "$SSH_CONFIG"
+}
+
+alias_for_identity() {
+    local id="$1"
+    echo "${IDENTITY_PREFIX}${id}"
+}
+
+identity_for_alias() {
+    local alias="$1"
+    echo "${alias#${IDENTITY_PREFIX}}"
+}
+
+# `ssh -T -o ConnectTimeout=10 git@<alias>` and parse GitHub's hello reply.
+# Returns the resolved GitHub username, or empty on failure.
+resolve_alias() {
+    local alias="$1"
+    local out
+    # `</dev/null` is critical: when called inside a `while read; do ssh; done`
+    # loop, ssh would otherwise inherit (and slurp) the loop's stdin pipe,
+    # leaving the loop with nothing to read on the next iteration.
+    out=$(ssh -T -o ConnectTimeout=10 -o BatchMode=yes \
+              "git@${alias}" </dev/null 2>&1 | head -1 || true)
+    # "Hi <user>! You've successfully authenticated..."
+    echo "$out" | sed -n 's/^Hi \([^!]*\)!.*/\1/p'
+}
+
+# Resolve owner from a git URL like:
+#   git@github-pqcybarg:pq-cybarg/digger.git    -> pqcybarg
+#   git@github.com:pq-cybarg/digger.git         -> (unsafe; warn)
+#   https://github.com/pq-cybarg/digger.git     -> (https; warn)
+identity_from_remote_url() {
+    local url="$1"
+    case "$url" in
+        git@${IDENTITY_PREFIX}*:*)
+            echo "${url#git@${IDENTITY_PREFIX}}" | cut -d: -f1
+            ;;
+        *) echo "" ;;
+    esac
+}
+
+# ---- commands ---- #
+
+cmd_doctor() {
+    echo "$(c_bold ghid doctor)  ssh config: $SSH_CONFIG"
+    echo
+    if [[ ! -f "$SSH_CONFIG" ]]; then
+        err "no SSH config file at $SSH_CONFIG"
+        return 1
+    fi
+    local count=0
+    local bare_count
+    bare_count=$(awk '
+        tolower($1) == "host" {
+            for (i = 2; i <= NF; ++i) {
+                if ($i == "github.com") { c++; break }
+            }
+        }
+        END { print c + 0 }
+    ' "$SSH_CONFIG")
+    if [[ "$bare_count" -gt 1 ]]; then
+        err "$bare_count blocks use bare \`Host github.com\` — only the first matches; the rest are dead."
+        echo "    First-match-wins is why Sourcetree-generated configs silently auth as whichever identity sits at the top."
+        echo "    Fix: rename each block to \`Host github-<identity>\` and update your remote URLs."
+    elif [[ "$bare_count" -eq 1 ]]; then
+        warn "one block uses bare \`Host github.com\`. If it has IdentityFile lines, plain git@github.com:... URLs will auth as that identity. Prefer aliased Hosts."
+    else
+        ok "no bare \`Host github.com\` blocks (good — forces explicit aliasing)"
+    fi
+
+    while IFS='|' read -r alias key; do
+        [[ -z "$alias" ]] && continue
+        count=$((count + 1))
+        local id; id=$(identity_for_alias "$alias")
+        local key_expand="${key/#\~/$HOME}"
+        if [[ ! -f "$key_expand" ]]; then
+            err "$alias  identity=$id  key=$key  ($(c_red missing))"
+        elif [[ "$(stat -f '%Op' "$key_expand" 2>/dev/null | tail -c4)" != "600" ]]; then
+            warn "$alias  identity=$id  key=$key  (perms != 0600)"
+        else
+            ok "$alias  identity=$id  key=$key"
+        fi
+    done < <(list_aliases)
+
+    if [[ "$count" -eq 0 ]]; then
+        warn "no \`Host ${IDENTITY_PREFIX}*\` aliases found. Run \`ghid new <identity>\` to add one."
+    fi
+}
+
+cmd_list() {
+    echo "$(c_bold Identities)"
+    echo
+    printf "  %-22s  %-44s  %s\n" "ALIAS" "KEY" "GITHUB RESOLVES TO"
+    while IFS='|' read -r alias key; do
+        [[ -z "$alias" ]] && continue
+        local resolved
+        resolved=$(resolve_alias "$alias")
+        if [[ -z "$resolved" ]]; then
+            resolved="$(c_red unreachable / no key registered)"
+        elif [[ "$resolved" == "$(identity_for_alias "$alias")" ]]; then
+            resolved="$(c_grn "$resolved")  ✓"
+        else
+            resolved="$(c_red "$resolved")  $(c_red MISMATCH)"
+        fi
+        printf "  %-22s  %-44s  %s\n" "$alias" "$key" "$resolved"
+    done < <(list_aliases)
+}
+
+cmd_current() {
+    in_git_repo || die "not inside a git repo"
+    local url
+    url=$(git remote get-url origin 2>/dev/null || echo "")
+    if [[ -z "$url" ]]; then
+        warn "this repo has no \`origin\` remote"
+        return 0
+    fi
+    echo "  origin url:  $url"
+    local id
+    id=$(identity_from_remote_url "$url")
+    if [[ -n "$id" ]]; then
+        ok "bound to identity: $(c_bold "$id")  (alias github-$id)"
+    else
+        warn "origin URL is NOT identity-aliased — pushes will use whichever \`Host github.com\` block matches first in ~/.ssh/config (likely wrong)."
+        echo "    Fix:  ghid switch <identity>"
+    fi
+    if [[ -f "$(git rev-parse --git-dir)/hooks/pre-push" ]]; then
+        local locked
+        locked=$(grep -E '^# GHID_LOCK=' "$(git rev-parse --git-dir)/hooks/pre-push" 2>/dev/null | head -1 | cut -d= -f2)
+        if [[ -n "$locked" ]]; then
+            ok "lock:  this repo is locked to identity $(c_bold "$locked")"
+        fi
+    fi
+}
+
+cmd_switch() {
+    local id="${1:-}"
+    [[ -z "$id" ]] && die "usage: ghid switch <identity>"
+    in_git_repo || die "not inside a git repo"
+    local alias; alias=$(alias_for_identity "$id")
+    grep -qE "^Host[[:space:]]+$alias\\b" "$SSH_CONFIG" \
+        || die "no \`Host $alias\` in $SSH_CONFIG. Run \`ghid new $id\` to add one."
+
+    git remote | while read -r remote; do
+        local url; url=$(git remote get-url "$remote")
+        local new_url
+        case "$url" in
+            git@github-*:*)
+                new_url="git@${alias}:${url#git@*:}"
+                ;;
+            git@github.com:*)
+                new_url="git@${alias}:${url#git@github.com:}"
+                ;;
+            https://github.com/*)
+                local path="${url#https://github.com/}"
+                new_url="git@${alias}:${path%.git}.git"
+                ;;
+            *)
+                warn "remote $remote URL not recognized as GitHub: $url"
+                continue
+                ;;
+        esac
+        git remote set-url "$remote" "$new_url"
+        ok "remote $remote  ->  $new_url"
+    done
+
+    # Also kill any credential helper for this repo so HTTPS fallback
+    # can't auto-auth as the wrong identity from the system keychain.
+    git config --local credential.helper ""
+    ok "credential.helper disabled for this repo (HTTPS leak prevention)"
+}
+
+cmd_lock() {
+    local id="${1:-}"
+    [[ -z "$id" ]] && die "usage: ghid lock <identity>"
+    in_git_repo || die "not inside a git repo"
+
+    # Always set the git config flag. The unified install-hooks.sh
+    # pre-push hook (and digger's auto-sync hook) read this.
+    git config --local ghid.lock-identity "$id"
+    ok "git config ghid.lock-identity = $(c_bold "$id")"
+
+    local hook_dir; hook_dir="$(git rev-parse --git-dir)/hooks"
+    local hook="$hook_dir/pre-push"
+    mkdir -p "$hook_dir"
+
+    # If a unified pre-push hook is already installed, leave it alone —
+    # it already reads ghid.lock-identity above.
+    if [[ -f "$hook" ]] && grep -q "^# GHID_AUTOSYNC_HOOK_V1" "$hook"; then
+        ok "unified pre-push hook detected — it will honor the lock automatically"
+        return 0
+    fi
+
+    cat > "$hook" <<HOOK
+#!/usr/bin/env bash
+# GHID_LOCK=$id
+# This repo is locked to GitHub identity '$id' by ghid. Any attempt to
+# push using a different identity will be refused. Unlock with:
+#   ghid unlock
+set -euo pipefail
+remote_url=\$(git remote get-url "\$1" 2>/dev/null || echo "")
+case "\$remote_url" in
+  git@github-$id:*) exit 0 ;;
+  *)
+    echo "" >&2
+    echo "  ✗ ghid: push refused — this repo is locked to identity '$id' but the" >&2
+    echo "    push target is: \$remote_url" >&2
+    echo "    If you meant to push, run:  ghid switch $id" >&2
+    echo "    To remove the lock entirely:  ghid unlock" >&2
+    exit 1
+    ;;
+esac
+HOOK
+    chmod +x "$hook"
+    ok "locked to identity $(c_bold "$id")  (pre-push hook installed)"
+}
+
+cmd_unlock() {
+    in_git_repo || die "not inside a git repo"
+
+    git config --local --unset ghid.lock-identity 2>/dev/null || true
+
+    local hook="$(git rev-parse --git-dir)/hooks/pre-push"
+    if [[ -f "$hook" ]] && grep -q "^# GHID_LOCK=" "$hook"; then
+        rm "$hook"
+        ok "lock removed (hook deleted, config flag cleared)"
+    elif [[ -f "$hook" ]] && grep -q "^# GHID_AUTOSYNC_HOOK_V1" "$hook"; then
+        ok "lock config flag cleared (unified hook remains for gh-pages auto-sync)"
+    else
+        warn "no ghid lock in place (config flag cleared if any)"
+    fi
+}
+
+cmd_verify() {
+    local id="${1:-}"
+    if [[ -z "$id" ]]; then
+        in_git_repo || die "usage: ghid verify <identity>   (or run inside a git repo)"
+        local url; url=$(git remote get-url origin 2>/dev/null || echo "")
+        id=$(identity_from_remote_url "$url")
+        [[ -z "$id" ]] && die "origin URL is not identity-aliased; run \`ghid switch <id>\` first"
+    fi
+    local alias; alias=$(alias_for_identity "$id")
+    local resolved; resolved=$(resolve_alias "$alias")
+    if [[ -z "$resolved" ]]; then
+        err "ssh -T git@$alias failed (no shell-Hi reply). Check the key is registered to the $id GitHub account."
+        return 1
+    elif [[ "$resolved" == "$id" ]]; then
+        ok "alias $alias resolves to GitHub user $(c_grn "$resolved")"
+    else
+        err "alias $alias resolves to GitHub user $(c_red "$resolved") (expected $id) — KEY IS REGISTERED TO THE WRONG ACCOUNT"
+        return 1
+    fi
+}
+
+cmd_whoami() {
+    in_git_repo || die "not inside a git repo"
+    cmd_current
+    echo
+    local url; url=$(git remote get-url origin 2>/dev/null || echo "")
+    local id; id=$(identity_from_remote_url "$url")
+    if [[ -n "$id" ]]; then
+        cmd_verify "$id"
+    fi
+}
+
+cmd_new() {
+    local id="${1:-}"
+    [[ -z "$id" ]] && die "usage: ghid new <identity>"
+    local alias; alias=$(alias_for_identity "$id")
+    local key="$HOME/.ssh/${id}-GitHub"
+
+    if grep -qE "^Host[[:space:]]+$alias\\b" "$SSH_CONFIG" 2>/dev/null; then
+        warn "alias $alias already exists in $SSH_CONFIG — skipping config append"
+    else
+        if [[ -f "$key" ]]; then
+            ok "reusing existing key $key (no regeneration)"
+        else
+            echo "  generating ed25519 key at $key"
+            ssh-keygen -t ed25519 -f "$key" -C "${id}@isolated"
+        fi
+        cat >> "$SSH_CONFIG" <<CFG
+
+Host $alias
+    HostName github.com
+    User git
+    IdentityFile $key
+    IdentitiesOnly yes
+    UseKeychain yes
+    AddKeysToAgent yes
+CFG
+        ok "added $alias to $SSH_CONFIG"
+    fi
+
+    # Smart: check whether GitHub ALREADY accepts this key for $id.
+    # If it does, the user is done — no need to re-register.
+    echo
+    echo "checking whether GitHub already accepts this key as $id ..."
+    local resolved; resolved=$(resolve_alias "$alias")
+    if [[ "$resolved" == "$id" ]]; then
+        ok "GitHub already recognizes this key as $(c_grn "$id") — no registration needed"
+        return 0
+    elif [[ -n "$resolved" ]]; then
+        err "GitHub recognizes this key as $(c_red "$resolved"), not $id."
+        echo "    Either this key is registered to the wrong account,"
+        echo "    or deregister it from $resolved and register on $id."
+        echo "    Public key:"
+        echo
+        cat "${key}.pub"
+        return 1
+    fi
+    warn "GitHub does not yet recognize this key. To register:"
+    echo "    1. In a fresh private/incognito browser window, log in as $id"
+    echo "    2. Open https://github.com/settings/ssh/new"
+    echo "    3. Paste the public key below"
+    echo
+    cat "${key}.pub"
+    echo
+    echo "Then verify with:  ghid verify $id"
+}
+
+# Generate a fresh key, archive the old one, update SSH config to point
+# at the new key. Then walk through registering new + revoking old on
+# GitHub. Cannot use GitHub's API automatically because identity
+# isolation forbids using one account's PAT to manipulate another's
+# keys; the rotation is operator-driven but ghid handles all the file
+# choreography.
+cmd_rotate() {
+    local id="${1:-}"
+    [[ -z "$id" ]] && die "usage: ghid rotate <identity>"
+    local alias; alias=$(alias_for_identity "$id")
+    local key="$HOME/.ssh/${id}-GitHub"
+    local archive_dir="$HOME/.ssh/.ghid-archive"
+    local ts; ts=$(date +%Y%m%d-%H%M%S)
+
+    grep -qE "^Host[[:space:]]+$alias\\b" "$SSH_CONFIG" 2>/dev/null \
+        || die "no alias $alias in $SSH_CONFIG. Run \`ghid new $id\` first."
+
+    local old_fp=""
+    if [[ -f "$key" ]]; then
+        mkdir -p "$archive_dir"
+        chmod 700 "$archive_dir"
+        cp "$key" "$archive_dir/${id}-GitHub.${ts}.old"
+        cp "${key}.pub" "$archive_dir/${id}-GitHub.${ts}.old.pub"
+        old_fp=$(ssh-keygen -lf "${key}.pub" 2>/dev/null)
+        ok "archived old key to $archive_dir/${id}-GitHub.${ts}.old{,.pub}"
+        rm "$key" "${key}.pub"
+    else
+        warn "no existing key at $key — nothing to archive; treating as fresh."
+    fi
+
+    echo "  generating fresh ed25519 key at $key"
+    ssh-keygen -t ed25519 -f "$key" -C "${id}@isolated-rotated-${ts}"
+    ok "new key generated"
+
+    echo
+    echo "--- next steps ---"
+    echo "  1. New public key (paste at github.com/settings/ssh/new):"
+    echo
+    cat "${key}.pub"
+    echo
+    echo "  2. In a fresh private/incognito browser, log in as $id and:"
+    echo "      a. https://github.com/settings/ssh/new   ← add the new key"
+    echo "      b. https://github.com/settings/keys       ← delete the OLD key"
+    [[ -n "$old_fp" ]] && echo "         (old fingerprint to delete: $old_fp)"
+    echo
+    echo "  3. Verify the new key works:"
+    echo "      ghid verify $id"
+    echo
+    [[ -d "$archive_dir" ]] && \
+        echo "Old key archived (revertable):  $archive_dir/${id}-GitHub.${ts}.old{,.pub}"
+}
+
+# ---- dispatch ---- #
+
+cmd="${1:-doctor}"
+shift 2>/dev/null || true
+case "$cmd" in
+    list)     cmd_list ;;
+    doctor)   cmd_doctor ;;
+    current)  cmd_current ;;
+    switch)   cmd_switch "$@" ;;
+    lock)     cmd_lock "$@" ;;
+    unlock)   cmd_unlock ;;
+    verify)   cmd_verify "$@" ;;
+    whoami)   cmd_whoami ;;
+    new)      cmd_new "$@" ;;
+    -h|--help|help)
+        sed -n '4,30p' "$0" | sed 's/^# \{0,1\}//'
+        ;;
+    *) die "unknown subcommand: $cmd (try: ghid help)" ;;
+esac
