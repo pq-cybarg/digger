@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="digger — cross-platform endpoint forensics suite">
+  <defs>
+    <!-- Background: deep ink with a soft warm glow on the left where the logo sits -->
+    <radialGradient id="bg" cx="22%" cy="38%" r="80%">
+      <stop offset="0%"   stop-color="#1c2026"/>
+      <stop offset="48%"  stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#02040a"/>
+    </radialGradient>
+
+    <!-- A subtle hash-chain grid behind the wordmark, evoking the dual-hash chain -->
+    <pattern id="chain" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e2530" stroke-width="0.5"/>
+      <circle cx="0" cy="0" r="1.2" fill="#243040"/>
+    </pattern>
+
+    <!-- Logo gradients (kept consistent with the project logo) -->
+    <radialGradient id="logo-bg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#161a22"/>
+      <stop offset="100%" stop-color="#05070a"/>
+    </radialGradient>
+    <linearGradient id="bone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f3efe3"/>
+      <stop offset="100%" stop-color="#bdb6a1"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c9cdd5"/>
+      <stop offset="100%" stop-color="#5a6068"/>
+    </linearGradient>
+
+    <!-- Accent gradient for the wordmark "d" cap -->
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#7cc4ff"/>
+      <stop offset="100%" stop-color="#a98bff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect width="1280" height="640" fill="url(#chain)" opacity="0.4"/>
+
+  <!-- ============================================================
+       Left: complete digger emblem (full skeleton + shovel)
+       The whole logo is a 240×280 viewBox; we scale by 1.55 and
+       translate. Every element from docs/logo.svg is preserved
+       except the inner "DIGGER" wordmark — we render that big at
+       right instead.
+       ============================================================ -->
+  <g transform="translate(60, 130) scale(1.55)">
+    <!-- emblem disc -->
+    <circle cx="120" cy="140" r="115" fill="url(#logo-bg)" stroke="#e8e3d4" stroke-width="3"/>
+    <circle cx="120" cy="140" r="105" fill="none" stroke="#3a3f48" stroke-width="1"/>
+
+    <!-- shovel: diagonal from top-left to bottom-right -->
+    <g transform="rotate(-32 120 140)">
+      <rect x="116" y="35" width="8" height="170" fill="url(#steel)" stroke="#2a2e36" stroke-width="1.2"/>
+      <!-- T-grip -->
+      <rect x="100" y="28" width="40" height="14" rx="4" fill="url(#steel)" stroke="#2a2e36" stroke-width="1.2"/>
+      <!-- shovel head -->
+      <path d="M 100 200 L 140 200 L 152 250 L 120 268 L 88 250 Z" fill="url(#steel)" stroke="#2a2e36" stroke-width="1.4"/>
+      <line x1="120" y1="208" x2="120" y2="258" stroke="#2a2e36" stroke-width="1"/>
+    </g>
+
+    <!-- skull -->
+    <g>
+      <ellipse cx="120" cy="92" rx="34" ry="38" fill="url(#bone)" stroke="#5a5240" stroke-width="1.5"/>
+      <!-- eye sockets -->
+      <ellipse cx="107" cy="90" rx="7" ry="9" fill="#05070a"/>
+      <ellipse cx="133" cy="90" rx="7" ry="9" fill="#05070a"/>
+      <!-- nasal cavity -->
+      <path d="M 120 100 L 116 112 L 124 112 Z" fill="#05070a"/>
+      <!-- teeth -->
+      <rect x="104" y="116" width="32" height="6" fill="#05070a"/>
+      <line x1="112" y1="116" x2="112" y2="122" stroke="url(#bone)" stroke-width="1.2"/>
+      <line x1="120" y1="116" x2="120" y2="122" stroke="url(#bone)" stroke-width="1.2"/>
+      <line x1="128" y1="116" x2="128" y2="122" stroke="url(#bone)" stroke-width="1.2"/>
+      <!-- cracks -->
+      <path d="M 100 78 L 92 70 M 100 78 L 96 86" stroke="#5a5240" stroke-width="1" fill="none"/>
+    </g>
+
+    <!-- spine + ribs -->
+    <g stroke="url(#bone)" stroke-width="2.5" fill="none">
+      <line x1="120" y1="132" x2="120" y2="200"/>
+      <path d="M 96 142 Q 120 152 144 142"/>
+      <path d="M 92 154 Q 120 166 148 154"/>
+      <path d="M 90 168 Q 120 180 150 168"/>
+      <path d="M 92 182 Q 120 192 148 182"/>
+    </g>
+
+    <!-- left arm (gripping the shovel handle, which is rotated above) -->
+    <g stroke="url(#bone)" stroke-width="4" fill="none" stroke-linecap="round">
+      <line x1="100" y1="138" x2="74" y2="118"/>
+      <line x1="74" y1="118" x2="56" y2="90"/>
+    </g>
+
+    <!-- right arm (down across the shovel shaft) -->
+    <g stroke="url(#bone)" stroke-width="4" fill="none" stroke-linecap="round">
+      <line x1="140" y1="138" x2="168" y2="160"/>
+      <line x1="168" y1="160" x2="186" y2="186"/>
+    </g>
+
+    <!-- hands -->
+    <circle cx="56" cy="90" r="5" fill="url(#bone)" stroke="#5a5240" stroke-width="1"/>
+    <circle cx="186" cy="186" r="5" fill="url(#bone)" stroke="#5a5240" stroke-width="1"/>
+  </g>
+
+  <!-- right: wordmark + tagline + chips -->
+  <g transform="translate(540, 0)" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif">
+
+    <!-- big wordmark "digger" -->
+    <text x="0" y="200" font-size="156" font-weight="800" fill="#f0e9d6" letter-spacing="-4">
+      digger
+    </text>
+
+    <!-- accent underline -->
+    <rect x="2" y="220" width="180" height="6" fill="url(#accent)" rx="3"/>
+
+    <!-- tagline (two lines) -->
+    <text x="0" y="280" font-size="28" font-weight="500" fill="#cfd3da" letter-spacing="-0.5">
+      Cross-platform endpoint forensics.
+    </text>
+    <text x="0" y="318" font-size="28" font-weight="500" fill="#cfd3da" letter-spacing="-0.5">
+      Codified ethics. Post-quantum signed evidence.
+    </text>
+
+    <!-- feature chips, row 1 -->
+    <g transform="translate(0, 372)" font-size="20" font-weight="600" fill="#0d1117">
+      <g>
+        <rect x="0" y="0" width="210" height="36" rx="18" fill="#7cc4ff"/>
+        <text x="105" y="24" text-anchor="middle">28 detectors</text>
+      </g>
+      <g transform="translate(225, 0)">
+        <rect x="0" y="0" width="200" height="36" rx="18" fill="#a98bff"/>
+        <text x="100" y="24" text-anchor="middle">15 live feeds</text>
+      </g>
+      <g transform="translate(440, 0)">
+        <rect x="0" y="0" width="260" height="36" rx="18" fill="#ffd152"/>
+        <text x="130" y="24" text-anchor="middle">18 compliance frameworks</text>
+      </g>
+    </g>
+
+    <!-- feature chips, row 2 -->
+    <g transform="translate(0, 422)" font-size="20" font-weight="600" fill="#0d1117">
+      <g>
+        <rect x="0" y="0" width="290" height="36" rx="18" fill="#ff9b3a"/>
+        <text x="145" y="24" text-anchor="middle">9 Decepticon countermeasures</text>
+      </g>
+      <g transform="translate(305, 0)">
+        <rect x="0" y="0" width="240" height="36" rx="18" fill="#5fd693"/>
+        <text x="120" y="24" text-anchor="middle">ML-DSA-65 · FIPS 140-3</text>
+      </g>
+    </g>
+
+    <!-- feature chips, row 3 -->
+    <g transform="translate(0, 472)" font-size="20" font-weight="600" fill="#0d1117">
+      <g>
+        <rect x="0" y="0" width="240" height="36" rx="18" fill="#e8e3d4"/>
+        <text x="120" y="24" text-anchor="middle">Local-LLM triage</text>
+      </g>
+      <g transform="translate(255, 0)">
+        <rect x="0" y="0" width="280" height="36" rx="18" fill="#e8e3d4"/>
+        <text x="140" y="24" text-anchor="middle">macOS · Linux · Windows</text>
+      </g>
+    </g>
+
+  </g>
+
+  <!-- bottom-right footer: URL -->
+  <text x="1240" y="600" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif"
+        font-size="20" font-weight="500" fill="#5a6068" text-anchor="end" letter-spacing="0.5">
+    pq-cybarg.github.io/digger
+  </text>
+
+  <!-- bottom-left footer: tagline detail -->
+  <text x="60" y="600" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif"
+        font-size="20" font-weight="500" fill="#5a6068" letter-spacing="0.3">
+    one detector per offensive kill-chain phase · MIT licensed
+  </text>
+</svg>
