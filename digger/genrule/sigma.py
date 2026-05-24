@@ -71,6 +71,7 @@ def _tags(finding: dict) -> list[str]:
         "supply_chain":         ["attack.initial_access", "attack.supply_chain_compromise"],
         "trapdoor":             ["attack.initial_access", "attack.supply_chain_compromise"],
         "exfiltration":         ["attack.exfiltration"],
+        "impact":               ["attack.impact"],
         "threat_actor":         ["attack.execution"],
         "env_hijack":           ["attack.privilege_escalation", "attack.defense_evasion"],
         "persistence_outlier": ["attack.persistence"],
@@ -982,6 +983,35 @@ _GENERATORS = {
     "c2":                   _gen_c2,
     "shai_hulud":           _gen_shai_hulud,
     "trapdoor":             _gen_trapdoor,
+    "impact":               lambda f, *, case_id: (
+        {
+            "title": f["title"],
+            "description": f["summary"] +
+                            f"\n\nAuto-generated from digger finding {f['finding_uuid']}.",
+            **_shared(f, case_id=case_id, level=f.get("severity") or "high"),
+            "logsource": (
+                {"category": "file_event"}
+                if (f.get("evidence") or {}).get("kind") in
+                    ("ransom_note_file", "mass_rename")
+                else {"category": "process_creation"}
+            ),
+            "detection": {
+                "selection": (
+                    {"TargetFilename|endswith":
+                          (f.get("evidence") or {}).get("basename") or ""}
+                    if (f.get("evidence") or {}).get("kind") == "ransom_note_file"
+                    else {"TargetFilename|endswith":
+                              (f.get("evidence") or {}).get("extension") or ""}
+                    if (f.get("evidence") or {}).get("kind") == "mass_rename"
+                    else {"CommandLine|contains":
+                              ((f.get("evidence") or {}).get("pattern") or "")
+                              .split(" ")[0:2]}
+                ),
+                "condition": "selection",
+            },
+            "tags": ["attack.impact", "attack.t1486", "attack.t1490"],
+        }
+    ),
     "exfiltration":         lambda f, *, case_id: (
         {
             "title": f["title"],
