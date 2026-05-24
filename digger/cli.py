@@ -602,6 +602,34 @@ def cmd_generate_sigma(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_generate_heatmap(args: argparse.Namespace) -> int:
+    from digger.genrule.heatmap import (
+        build_coverage, render_html, render_json, render_text, write_heatmap,
+    )
+    coverage = build_coverage()
+    fmt = args.format
+    if args.out:
+        out_path = Path(args.out)
+        written = write_heatmap(coverage, fmt=fmt, out_path=out_path)
+        print(f"wrote {written}", file=sys.stderr)
+        s = coverage["summary"]
+        print(
+            f"coverage: {s['detectors_total']} detectors · "
+            f"{s['techniques_covered']} techniques · "
+            f"{s['tactics_covered']} of 14 tactics",
+            file=sys.stderr,
+        )
+        return 0
+    if fmt == "html":
+        print("--out is required for --format html", file=sys.stderr)
+        return 2
+    if fmt == "json":
+        print(render_json(coverage))
+    else:
+        print(render_text(coverage))
+    return 0
+
+
 # ---- memory subcommands ----------------------------------------------- #
 
 
@@ -1095,6 +1123,16 @@ def build_parser() -> argparse.ArgumentParser:
     pgs.add_argument("--out-dir", help="Where to write the .yml files (default: <case>/sigma-out/ or out/sigma/)")
     pgs.add_argument("--verbose", "-v", action="store_true")
     pgs.set_defaults(func=cmd_generate_sigma)
+
+    phm = gen_sub.add_parser(
+        "heatmap",
+        help="MITRE ATT&CK coverage heatmap derived from detector tags",
+    )
+    phm.add_argument("--format", choices=("text", "json", "html"),
+                     default="text",
+                     help="Output format (default: text)")
+    phm.add_argument("--out", help="Output file path (default: stdout for text/json, required for html)")
+    phm.set_defaults(func=cmd_generate_heatmap)
 
     # ---- export ---- #
     pexp = sub.add_parser("export", help="Export findings to interchange formats")

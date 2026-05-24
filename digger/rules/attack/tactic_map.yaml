@@ -1,0 +1,164 @@
+# MITRE ATT&CK Enterprise — technique → tactic map.
+#
+# Seeded from the MITRE Enterprise matrix (v16). Many techniques are
+# multi-tactic; we list every tactic the technique appears under in the
+# official kill_chain_phases list.
+#
+# This is the *fallback* corpus. When digger.intel.sources.mitre_attack
+# is extended to surface tactic info, that live cache overrides this
+# file per-technique.
+#
+# Coverage focus: only techniques and sub-techniques referenced by at
+# least one current digger detector's to_sigma_template() tags or
+# per-finding Sigma output. Adding a new detector that emits a new
+# tag means appending its (id: [tactic, ...]) line here.
+
+# live-first-ok: Mitre publishes ATT&CK on a 6-month cadence as STIX 2.1;
+# the live mitre_attack feed already pulls the bundle but currently
+# extracts only actor/group info. When the feed is extended to surface
+# kill_chain_phases per technique, _load_tactic_map() will overlay
+# that on top of this bundled file.
+
+techniques:
+  # Reconnaissance
+  T1589.002: [reconnaissance]
+  T1592.002: [reconnaissance]
+  T1595.001: [reconnaissance]
+
+  # Resource Development
+  T1588.002: [resource-development]
+  T1588.005: [resource-development]
+
+  # Initial Access
+  T1190:     [initial-access]
+  T1195:     [initial-access]
+  T1195.001: [initial-access]
+  T1195.002: [initial-access]
+  T1199:     [initial-access]
+
+  # Execution
+  T1053:     [execution, persistence, privilege-escalation]
+  T1059:     [execution]
+  T1059.001: [execution]
+  T1059.003: [execution]
+  T1059.004: [execution]
+  T1059.006: [execution]
+  T1203:     [execution]
+  T1204:     [execution]
+  T1569:     [execution]
+  T1569.002: [execution]
+
+  # Persistence
+  T1543:     [persistence, privilege-escalation]
+  T1543.002: [persistence, privilege-escalation]
+  T1546:     [persistence, privilege-escalation]
+  T1547:     [persistence, privilege-escalation]
+  T1547.001: [persistence, privilege-escalation]
+  T1547.006: [persistence, privilege-escalation]
+  T1098:     [persistence]
+  T1098.004: [persistence]
+
+  # Privilege Escalation
+  T1055:     [defense-evasion, privilege-escalation]
+  T1068:     [privilege-escalation]
+  T1548:     [privilege-escalation, defense-evasion]
+  T1548.001: [privilege-escalation, defense-evasion]
+  T1548.003: [privilege-escalation, defense-evasion]
+
+  # Defense Evasion
+  T1027:     [defense-evasion]
+  T1036:     [defense-evasion]
+  T1070:     [defense-evasion]
+  T1070.001: [defense-evasion]
+  T1070.002: [defense-evasion]
+  T1070.003: [defense-evasion]
+  T1070.004: [defense-evasion]
+  T1070.005: [defense-evasion]
+  T1070.006: [defense-evasion]
+  T1218:     [defense-evasion]
+  T1484:     [defense-evasion, privilege-escalation]
+  T1484.001: [defense-evasion, privilege-escalation]
+  T1562:     [defense-evasion]
+  T1562.001: [defense-evasion]
+  T1562.004: [defense-evasion]
+  T1562.008: [defense-evasion]
+  T1564:     [defense-evasion]
+  T1564.003: [defense-evasion]
+  T1565:     [defense-evasion]
+  T1565.001: [defense-evasion]
+  T1574:     [defense-evasion, persistence, privilege-escalation]
+  T1574.006: [defense-evasion, persistence, privilege-escalation]
+  T1622:     [defense-evasion]
+
+  # Credential Access
+  T1003:     [credential-access]
+  T1003.006: [credential-access]
+  T1110:     [credential-access]
+  T1110.001: [credential-access]
+  T1539:     [credential-access]
+  T1552:     [credential-access]
+  T1552.001: [credential-access]
+  T1552.005: [credential-access]
+  T1555:     [credential-access]
+  T1555.003: [credential-access]
+  T1558:     [credential-access]
+  T1558.003: [credential-access]
+  T1558.004: [credential-access]
+
+  # Discovery
+  T1057:     [discovery]
+  T1082:     [discovery]
+  T1087:     [discovery]
+  T1087.002: [discovery]
+
+  # Lateral Movement
+  T1021:     [lateral-movement]
+  T1021.001: [lateral-movement]
+  T1021.002: [lateral-movement]
+  T1021.004: [lateral-movement]
+  T1021.005: [lateral-movement]
+  T1021.006: [lateral-movement]
+  T1550:     [defense-evasion, lateral-movement]
+  T1550.002: [defense-evasion, lateral-movement]
+  T1570:     [lateral-movement]
+
+  # Collection
+  T1056:     [collection, credential-access]
+  T1185:     [collection]
+  T1176:     [persistence]
+
+  # Command and Control
+  T1071:     [command-and-control]
+  T1095:     [command-and-control]
+  T1571:     [command-and-control]
+  T1573:     [command-and-control]
+  T1573.001: [command-and-control]
+  T1573.002: [command-and-control]
+  T1528:     [credential-access]
+
+  # Exfiltration
+  T1041:     [exfiltration]
+  T1048:     [exfiltration]
+  T1048.003: [exfiltration]
+  T1567:     [exfiltration]
+  T1567.001: [exfiltration]
+  T1567.002: [exfiltration]
+  T1572:     [command-and-control]   # Sigma convention puts this here
+
+  # Impact
+  T1485:     [impact]
+  T1486:     [impact]
+  T1489:     [impact]
+  T1490:     [impact]
+  T1491:     [impact]
+  T1496:     [impact]
+  T1529:     [impact]
+  T1561:     [impact]
+
+  # Container / cloud
+  T1078:     [defense-evasion, persistence, privilege-escalation, initial-access]
+  T1078.004: [defense-evasion, persistence, privilege-escalation, initial-access]
+  T1611:     [privilege-escalation]
+
+  # Browser-targeted (digger's BrowserDetector)
+  T1539:     [credential-access]

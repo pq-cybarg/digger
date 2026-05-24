@@ -62,6 +62,7 @@ Or one-shot: `digger investigate --case-dir ./case --report report.html`.
 | **Comprehensive browser scanner** | Chromium + Firefox: cookies (counts only, never values), saved-passwords summary (counts only), IndexedDB, Local Storage, PWAs, profile defaults, service workers. Live URLhaus + ThreatFox cross-reference on every origin. Tracks unpatched-Chromium bug class (e.g., [crbug-40062121](https://issues.chromium.org/issues/40062121) service-worker persistence). |
 | **Firewall audit + remediation** | Unified pf / nftables / iptables / ufw / firewalld / WFP audit. Emits copy-pasteable platform-specific fix commands routed through `redact_dangerous_command`. Never applies changes itself. |
 | **Auto-Sigma export per detector** | `digger generate sigma --from-detectors` writes one SIEM-deployable Sigma rule per detector. Plus per-finding Sigma generation for case-specific signatures. |
+| **ATT&CK coverage heatmap** | `digger generate heatmap --format html --out cov.html` renders a Navigator-style matrix showing which MITRE techniques are covered by which detectors, derived statically from detector tags. Text / JSON / HTML output. |
 
 ---
 
