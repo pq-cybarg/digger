@@ -45,6 +45,7 @@ observation-only.
 | `counter_re` | Counter-RE on us | Debuggers (gdb/lldb/dtrace/x64dbg/IDA/Ghidra/radare2/frida/WindBg) with target-PID matching digger or EDR processes | T1622, T1057 |
 | `persistent_sessions` | Persistent sessions | tmux/screen/zellij parented by network service (sshd excluded); detached nohup/setsid with sockets; user-systemd ExecStart in user-writable shell scripts | T1546, T1543.002 |
 | `attacker_tooling` | Tooling on host | 60+ red-team tools across 10 categories. Three detection modes: T1 running process, T2 installed package (brew/dpkg/rpm/snap/flatpak/Windows uninstall), T3 deployment artifact on disk — catches git-clone + docker-compose'd kits like Z3r0, Decepticon, Mythic, Sliver, Havoc, Empire, Metasploit even when nothing is running. Self-attribution downgrades severity for dev-clone / venv paths. | T1588.002 |
+| `anti_forensics` | Covering tracks | Shell history wiping (history -c, HISTFILE=/dev/null, ~/.bash_history symlinked to /dev/null); Unix log truncation (truncate -s 0 /var/log/, journalctl --vacuum-time=1s, rm /var/log/auth.log); Windows event log clearing (wevtutil cl, Clear-EventLog); timestomping (touch -t / --reference, SetCreationTime); secure-deletion tooling (shred / srm / sdelete / wipe); tmpfs RAM-only pivots. 10th Decepticon countermeasure. | T1070, T1070.001-.006 |
 
 Full walkthrough: [docs/decepticon-counter](https://pq-cybarg.github.io/digger/decepticon-counter.html).
 

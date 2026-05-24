@@ -867,6 +867,25 @@ _GENERATORS = {
     "lateral":              _gen_lateral,
     "ad_attacks":           _gen_ad_attacks,
     "cloud_attacks":        _gen_cloud_attacks,
+    "anti_forensics":       lambda f, *, case_id: {
+        "title": f["title"],
+        "description": f["summary"] +
+                        f"\n\nAuto-generated from digger finding {f['finding_uuid']}.",
+        **_shared(f, case_id=case_id, level=f.get("severity") or "high"),
+        "logsource": {"category": "process_creation"},
+        "detection": {
+            "selection": (
+                {"CommandLine|contains":
+                    ((f.get("evidence") or {}).get("pattern") or "")
+                    .split(" ")[0:1] or [""]}
+                if (f.get("evidence") or {}).get("kind") == "anti_forensics_cmdline"
+                else {"TargetFilename|endswith":
+                        [".bash_history", ".zsh_history"]}
+            ),
+            "condition": "selection",
+        },
+        "tags": ["attack.t1070", "attack.defense_evasion"],
+    },
     "attacker_tooling":     lambda f, *, case_id: {
         "title": f["title"],
         "description": f["summary"] +
