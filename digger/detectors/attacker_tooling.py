@@ -39,6 +39,12 @@ from digger.opsec.self_id import identify
 
 # (canonical-tool-name, [process basename patterns], category)
 _TOOLS: list[tuple[str, list[str], str]] = [
+    # Multi-agent red-team automation platforms
+    ("z3r0",             ["z3r0", "z3r0-server", "z3r0-agent"],
+     "c2_framework"),
+    ("decepticon",       ["decepticon", "decepticon-cli", "decepticon-server"],
+     "c2_framework"),
+
     # C2 frameworks
     ("metasploit",       ["msfconsole", "msfvenom", "msfd", "msfrpcd"],
      "c2_framework"),
@@ -410,3 +416,90 @@ class AttackerToolingDetector(Detector):
                     },
                     mitre="T1588.002",
                 )
+
+        # ---- T3 DEPLOYMENT-ARTIFACT matches ----
+        # Some frameworks don't show up as a single bin in $PATH or in
+        # the package inventory — they're git-cloned + docker-compose'd
+        # in place. We match against deployment-artifact paths
+        # (config dirs, compose files, distinctive subpaths) seen in
+        # the recent_files collector or in process open_files.
+        deployment_markers: list[tuple[str, str, str]] = [
+            # (canonical_tool, path_substring_match, category)
+            ("z3r0",       "/.z3r0/config.json",       "c2_framework"),
+            ("z3r0",       "/.z3r0/agents/",           "c2_framework"),
+            ("z3r0",       "/Z3r0/docker-compose",     "c2_framework"),
+            ("z3r0",       "/Z3r0/sandbox/",           "c2_framework"),
+            ("decepticon", "/Decepticon/",             "c2_framework"),
+            ("sliver",     "/sliver-server",           "c2_framework"),
+            ("sliver",     "/.sliver/configs/",        "c2_framework"),
+            ("mythic",     "/Mythic/docker-compose",   "c2_framework"),
+            ("havoc",      "/Havoc/teamserver",        "c2_framework"),
+            ("metasploit", "/metasploit-framework/",   "c2_framework"),
+            ("empire",     "/Empire/empire.py",        "c2_framework"),
+        ]
+        seen_deployment: set[str] = set()
+        # Walk both recent_files (catches dormant installs) and every
+        # process's open_files (catches actively-used kits).
+        for art in store.iter_artifacts():
+            d = art["data"]
+            paths: list[str] = []
+            entries = d.get("entries")
+            if isinstance(entries, list):
+                for e in entries:
+                    if isinstance(e, dict):
+                        p = e.get("path") or e.get("file") or e.get("target")
+                        if p:
+                            paths.append(str(p))
+                    elif isinstance(e, str):
+                        paths.append(e)
+            of = d.get("open_files")
+            if isinstance(of, list):
+                paths.extend(str(p) for p in of if p)
+            if not paths:
+                continue
+            blob = "\n".join(paths)
+            for canonical, marker, category in deployment_markers:
+                if canonical in seen_deployment:
+                    continue
+                if marker.lower() not in blob.lower():
+                    continue
+                seen_deployment.add(canonical)
+                sev = _SEV_BY_CATEGORY.get(category, "high")
+                # Self-attribute on dev paths so digger's own clone
+                # doesn't fire when researchers check out these repos
+                # for study.
+                dev_context = any(_looks_like_dev_path(p) for p in paths)
+                if dev_context and sev in ("high", "critical"):
+                    sev = "medium"
+                yield Finding(
+                    detector=self.name,
+                    severity=sev,
+                    title=(
+                        f"Attacker tool deployed on host: {canonical} "
+                        f"({category}) — matched {marker}"
+                        + (" [dev-context]" if dev_context else "")
+                    ),
+                    summary=(
+                        f"Deployment-artifact path containing '{marker}' "
+                        f"was observed in {art['collector']} "
+                        f"({art['subject']}). This is a {canonical} "
+                        "installation footprint — the framework is "
+                        "present on disk regardless of whether it is "
+                        "currently running."
+                        + ("  Self-attribution: the artifact paths "
+                           "look like a dev-clone / researcher checkout; "
+                           "downranked accordingly."
+                           if dev_context else "")
+                    ),
+                    artifact_refs=[art["artifact_uuid"]],
+                    evidence={
+                        "kind": "deployed_attacker_tool",
+                        "tool": canonical,
+                        "category": category,
+                        "marker": marker,
+                        "source_artifact": art["subject"],
+                        "dev_context": dev_context,
+                    },
+                    mitre="T1588.002",
+                )
+                break  # one tool per artifact is enough

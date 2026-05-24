@@ -44,7 +44,7 @@ observation-only.
 | `cloud_attacks` | Cloud | IMDS endpoint hit from non-cloud-agent; cloud creds in shell env; world-readable creds files; container escape primitives; kubeconfig theft; cloud-CLI privesc commands | T1552.005, T1078.004, T1611, T1528 |
 | `counter_re` | Counter-RE on us | Debuggers (gdb/lldb/dtrace/x64dbg/IDA/Ghidra/radare2/frida/WindBg) with target-PID matching digger or EDR processes | T1622, T1057 |
 | `persistent_sessions` | Persistent sessions | tmux/screen/zellij parented by network service (sshd excluded); detached nohup/setsid with sockets; user-systemd ExecStart in user-writable shell scripts | T1546, T1543.002 |
-| `attacker_tooling` | Tooling on host | 60+ red-team tools across 10 categories; running OR installed; self-attribution downgrades severity for dev-clone / venv paths | T1588.002 |
+| `attacker_tooling` | Tooling on host | 60+ red-team tools across 10 categories. Three detection modes: T1 running process, T2 installed package (brew/dpkg/rpm/snap/flatpak/Windows uninstall), T3 deployment artifact on disk — catches git-clone + docker-compose'd kits like Z3r0, Decepticon, Mythic, Sliver, Havoc, Empire, Metasploit even when nothing is running. Self-attribution downgrades severity for dev-clone / venv paths. | T1588.002 |
 
 Full walkthrough: [docs/decepticon-counter](https://pq-cybarg.github.io/digger/decepticon-counter.html).
 
