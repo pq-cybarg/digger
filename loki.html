@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LOKI / signature-base — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="loki">
+<main>
+
+<h1>LOKI / signature-base
+  <span class="subtitle">Pull Florian Roth's IOC + YARA corpus — the rule set that powers LOKI, Loki-RS, and THOR Lite — into digger's existing detector pipeline.</span>
+</h1>
+
+<h2>What it brings</h2>
+
+<p>The <a href="https://github.com/Neo23x0/signature-base">Neo23x0/signature-base</a>
+repository is the open-source community IOC + YARA corpus that powers
+Florian Roth's LOKI scanner family. It contains:</p>
+
+<ul>
+<li><strong>~3000 YARA rules</strong> covering malware families, hack tools, ransomware, exploits, anomalies, and threat-actor toolkits</li>
+<li><strong>Filename IOCs</strong> — regex patterns matching disk paths associated with known tradecraft</li>
+<li><strong>Hash IOCs</strong> — MD5 / SHA-1 / SHA-256 of known-bad files</li>
+<li><strong>C2 IOCs</strong> — IPs, domains, and URLs</li>
+<li><strong>False-positive lists</strong> to suppress noise</li>
+</ul>
+
+<p>digger consumes signature-base in three ways:</p>
+
+<dl class="kv">
+  <dt>YARA detector</dt><dd>The existing <code>yara</code> detector automatically loads every <code>signature-base/yara/*.yar</code> file when signature-base is present, in addition to its bundled baseline rules.</dd>
+  <dt>LokiStyleDetector</dt><dd>A dedicated detector (<code>digger.loki.LokiStyleDetector</code>) consumes the IOC files directly: filename regex matches against process exes and recent files, hash matches against process exe hashes, C2 matches against network connections and browser history.</dd>
+  <dt>Loki binary bridge</dt><dd>If you have an installed LOKI / Loki-RS binary, <code>digger.loki.run_loki_binary()</code> can call it for parity with existing LOKI workflows.</dd>
+</dl>
+
+<h2>Getting signature-base</h2>
+
+<pre><code># Clone (or fast-forward update) signature-base
+digger loki update
+
+# Check what was loaded
+digger loki status
+#  signature-base at /Users/you/.cache/digger/signature-base
+#    filename_iocs                 84
+#    hash_iocs                     2104
+#    c2_iocs                       1320
+#    false_positive_hashes         97
+#    yara_rule_files               2876</code></pre>
+
+<p>Default path is <code>~/.cache/digger/signature-base/</code>. Override with
+<code>--target</code> or with the <code>DIGGER_SIGNATURE_BASE_DIR</code>
+environment variable.</p>
+
+<p>The updater uses <code>git</code> when available (shallow clone, then
+fast-forward pull on subsequent runs) and falls back to an HTTPS tarball
+download otherwise.</p>
+
+<h2>Running the detector</h2>
+
+<p>Once signature-base is present, every <code>digger scan</code> picks it
+up automatically. To run just the LOKI-style checks against an existing
+case:</p>
+
+<pre><code>digger loki scan --case-dir ./case-1
+# loki: 7 findings</code></pre>
+
+<p>Or programmatically:</p>
+
+<pre><code>from digger.loki import LokiStyleDetector
+from digger.core import EvidenceStore
+
+store = EvidenceStore("./case-1")
+n = LokiStyleDetector().run(store)
+print(f"{n} loki findings")
+store.close()</code></pre>
+
+<h2>What gets matched</h2>
+
+<table>
+<thead><tr><th>signature-base file</th><th>Matched against</th><th>Detector outputs</th></tr></thead>
+<tbody>
+<tr><td><code>iocs/hash-iocs.txt</code></td><td><code>processes.data.exe_sha256</code> (computed by the process collector). On demand we also hash with MD5 / SHA-1 if those kinds appear in the IOC set.</td><td>Severity scaled from the LOKI 0-100 score (≥80 critical, ≥60 high, ≥40 medium, ≥20 low). MITRE T1204.002.</td></tr>
+<tr><td><code>iocs/filename-iocs.txt</code></td><td>Process exe paths and every path in <code>recent_files</code> entries.</td><td>Severity from LOKI score. MITRE T1036.</td></tr>
+<tr><td><code>iocs/c2-iocs.txt</code></td><td>Established network connections (IP), browser history (domains, URLs).</td><td>Severity from LOKI score. MITRE T1071.</td></tr>
+<tr><td><code>iocs/falsepositive-iocs.txt</code></td><td>Used to suppress hash matches that would otherwise fire.</td><td>—</td></tr>
+<tr><td><code>yara/*.yar</code></td><td>Compiled and merged into the existing <code>yara</code> detector. Matches against process exes and recent files.</td><td>Native YARA findings.</td></tr>
+</tbody>
+</table>
+
+<h2>Filename anomaly checks (LOKI-style)</h2>
+
+<p>Even without signature-base, the Loki detector contributes two filename
+anomaly checks LOKI is known for:</p>
+
+<ul>
+<li><strong>Double extensions</strong> — files matching <code>*.pdf.exe</code>,
+  <code>*.doc.scr</code>, <code>*.jpg.com</code>, and friends.
+  Classic dropper masquerade (MITRE T1036.007).</li>
+<li><strong>Right-to-Left override trickery</strong> — filenames containing
+  U+202E (or related directional-override codepoints) that make
+  <code>resume[U+202E]fdp.exe</code> render as <code>resumeexe.pdf</code>
+  (MITRE T1036.002).</li>
+</ul>
+
+<p>These fire regardless of whether signature-base is installed.</p>
+
+<h2>Severity mapping</h2>
+
+<p>signature-base rules carry a 0-100 "score" that LOKI uses as a threshold.
+digger maps that to its five-level severity:</p>
+
+<table>
+<thead><tr><th>LOKI score</th><th>digger severity</th></tr></thead>
+<tbody>
+<tr><td>≥ 80</td><td><span class="pill crit">critical</span></td></tr>
+<tr><td>≥ 60</td><td><span class="pill high">high</span></td></tr>
+<tr><td>≥ 40</td><td><span class="pill med">medium</span></td></tr>
+<tr><td>≥ 20</td><td><span class="pill low">low</span></td></tr>
+<tr><td>&lt; 20</td><td><span class="pill info">info</span></td></tr>
+</tbody>
+</table>
+
+<h2>Calling an installed LOKI binary</h2>
+
+<p>If you have <code>loki</code>, <code>loki-rs</code>, or <code>Loki.py</code>
+on PATH, you can invoke it directly:</p>
+
+<pre><code>from digger.loki import run_loki_binary
+
+result = run_loki_binary("/etc")
+print(result.stdout[:1000])
+print("return code:", result.return_code)</code></pre>
+
+<p>Useful when you want full LOKI features (auto-update of signatures via
+their own upgrader, scanning of process memory on supported platforms,
+ARCHIVE-FILE matching) without re-implementing them in digger.</p>
+
+<h2>Post-quantum integrity of the corpus</h2>
+
+<p>The threat-intel rule corpus is itself a target. An attacker who can
+write to your <code>signature-base/</code> on disk (supply-chain attack,
+malicious co-tenant, compromised account) can corrupt the corpus —
+rewriting rules to <em>miss</em> the malware they care about, or
+poisoning rules to fire false positives on your tooling. HTTPS pull
+covers transport, but says nothing about the integrity of bytes already
+on disk.</p>
+
+<p>digger ships a defense-in-depth layer: after a successful
+<code>digger loki update</code>, you can compute a dual SHA-256 +
+SHA3-256 tree-hash of the corpus and PQC-sign it with your operator
+key. Every subsequent use of the corpus verifies the signature first.</p>
+
+<pre><code># One-time: generate an operator signing key (or reuse the one you
+# already created for `digger pqc sign`)
+python -c "
+from digger.crypto import PQCBackend
+b = PQCBackend(sig_alg='ML-DSA-65')
+pk, sk = b.generate_signing_key()
+open('operator.sk', 'wb').write(sk)
+open('operator.sk.pub', 'wb').write(pk)
+"
+
+# Update + sign in one step
+digger loki update --sign-key ./operator.sk
+
+# …or sign retroactively after an existing update
+digger loki sign --key ./operator.sk
+
+# Verify any time
+digger loki verify
+#  [VERIFIED] /Users/you/.cache/digger/signature-base
+#  algorithm: ML-DSA-65
+#  current sha256_root:   4b3f9d…
+#  current sha3_256_root: e1c0a2…
+
+# Schedule auto-signing on every cron pull
+DIGGER_LOKI_SIGN_KEY=/secrets/operator.sk \
+   digger --no-banner loki update</code></pre>
+
+<p>The LokiStyleDetector verifies the signature on every run. Tampered
+corpora emit a <strong>critical</strong> finding
+("signature-base corpus integrity violation", MITRE T1554) and the
+detector refuses to use the rules until the corpus is re-pulled and
+re-signed. Unsigned corpora log a warning by default; set
+<code>DIGGER_LOKI_STRICT=1</code> to refuse unsigned corpora entirely.</p>
+
+<h3>Does PQC actually matter here?</h3>
+
+<p>For the <strong>IOC hashes themselves</strong> in signature-base
+(SHA-256, SHA-1, MD5) — no. Grover's quantum search halves preimage
+resistance, so SHA-256 still provides 128-bit security against quantum
+attack; SHA-1 and MD5 are already broken classically and you should
+treat them accordingly anyway.</p>
+
+<p>For the <strong>integrity of the corpus itself</strong> — yes.
+"Harvest now, decrypt later" doesn't apply to public rule data
+(confidentiality isn't the concern), but "harvest now, <em>forge</em>
+later" applies to any classical signature over data you're going to
+trust years from now. By signing with ML-DSA-65 (FIPS 204) today, the
+corpus snapshot's integrity is durable across that horizon. Same
+reasoning as the dual SHA-256 + SHA3-256 evidence chain.</p>
+
+<h2>Keeping it fresh</h2>
+
+<p>signature-base receives near-daily commits. Schedule:</p>
+
+<pre><code># crontab — every 6 hours, auto-sign with the operator key
+0 */6 * * *   DIGGER_LOKI_SIGN_KEY=/secrets/operator.sk \
+              digger --no-banner loki update >/var/log/digger-loki-update.log 2>&1</code></pre>
+
+<h2>Credit</h2>
+
+<p>signature-base is the work of <a href="https://github.com/Neo23x0">Florian Roth</a>
+and many contributors. If your organization gets defensive value out of
+LOKI / Loki-RS via this integration, support <a href="https://www.nextron-systems.com/">Nextron Systems</a>
+and the signature-base maintainers.</p>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

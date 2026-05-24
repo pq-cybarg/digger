@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Detection-rule generation — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="genrule">
+<main>
+
+<h1>Detection-rule generation
+  <span class="subtitle">Turn an IR finding into a portable Sigma rule that any SIEM can consume. Closes the gap between "we noticed something here" and "every host runs a detection for it."</span>
+</h1>
+
+<h2>Why this exists</h2>
+
+<p>Findings answer "what happened on this host?" Detection rules answer
+"what should fire on any host when this happens again?" The hand-off
+between investigation and detection engineering is, in most orgs, a
+human Slack message. digger automates it: a finding's evidence carries
+enough structure to write the corresponding Sigma rule mechanically,
+with a stable UUID, ATT&amp;CK tags, and a reference back to the original
+case for provenance.</p>
+
+<h2>Two paths: per-finding vs per-detector</h2>
+
+<p>digger emits Sigma in two distinct flows:</p>
+
+<ul class="kv">
+  <li><b>Per-finding rules</b> (<code>--case-dir DIR</code>) — walks
+    every finding in the case and emits a rule scoped to that specific
+    observation. Stable UUIDs (SHA-256 of finding content), so re-running
+    on the same case overwrites the same file.</li>
+  <li><b>Per-detector templates</b> (<code>--from-detectors</code>) — emits
+    one generic, class-level rule per detector that implements
+    <code>to_sigma_template()</code>. No case required. Useful when you
+    want SIEM-deployable detection logic without running a case first.</li>
+</ul>
+
+<h2>Run it</h2>
+
+<pre><code># Per-finding mode
+digger generate sigma --case-dir ./case-1
+# generated 4 Sigma rules from 7 findings
+# out: ./case-1/sigma-out
+
+# Just one finding by UUID
+digger generate sigma --case-dir ./case-1 --finding ae6b2cac-b996-4a29-bc2e-15e86d4f5412
+
+# Custom output directory
+digger generate sigma --case-dir ./case-1 --out-dir ./sigma-rules/
+
+# Per-detector templates (no case needed)
+digger generate sigma --from-detectors --out-dir out/sigma/
+# generated 9 per-detector Sigma templates
+# out: out/sigma
+
+# Verbose: print every written filename
+digger generate sigma --case-dir ./case-1 -v</code></pre>
+
+<p>Each rule lands in its own <code>.yml</code> file named
+<code>&lt;uuid&gt;_&lt;title&gt;.yml</code>. The UUIDs are deterministic
+(SHA-256 of the finding content), so re-running on the same case
+overwrites the same files rather than producing duplicates.</p>
+
+<h2>What gets mapped</h2>
+
+<table>
+<thead><tr><th>Finding detector</th><th>Sigma log source</th><th>What gets emitted</th></tr></thead>
+<tbody>
+<tr><td><code>lolbins</code></td><td>process_creation</td><td>Image ends with the LOLBin name, CommandLine contains the distinguishing fragment</td></tr>
+<tr><td><code>suspicious_processes</code></td><td>process_creation</td><td>Image + ParentImage + CommandLine selectors</td></tr>
+<tr><td><code>c2</code> (cmdline pattern)</td><td>process_creation</td><td>CommandLine regex from the matched framework pattern</td></tr>
+<tr><td><code>c2</code> (IP)</td><td>network_connection</td><td>DestinationIp selector</td></tr>
+<tr><td><code>c2</code> (URL)</td><td>proxy</td><td>c-uri contains the matched URL fragment</td></tr>
+<tr><td><code>shai_hulud</code> (package)</td><td>file_event</td><td>TargetFilename ends with /node_modules/&lt;pkg&gt;/package.json + version filter</td></tr>
+<tr><td><code>shai_hulud</code> (workflow)</td><td>file_event</td><td>TargetFilename ends with .github/workflows/shai-hulud-workflow.yml</td></tr>
+<tr><td><code>env_hijack</code></td><td>process_creation</td><td>EnvironmentVariables contains the hijack variable=value</td></tr>
+<tr><td><code>persistence_outlier</code></td><td>file_event</td><td>TargetFilename contains scratch/user-path fragments</td></tr>
+<tr><td><code>threat_actor</code></td><td>process_creation</td><td>CommandLine regex from the attributed TTP pattern</td></tr>
+<tr><td><code>recon</code></td><td>linux auth / network_connection</td><td>SSH brute-force / banner-grab pattern OR count-aggregation of distinct DestinationPort per SourceIp</td></tr>
+<tr><td><code>exploitation</code> (service→shell)</td><td>process_creation</td><td>ParentImage ends with /nginx, /httpd, /php-fpm, etc. AND Image ends with /sh, /bash, /cmd.exe, etc.</td></tr>
+<tr><td><code>exploitation</code> (RCE chain)</td><td>process_creation</td><td>Image ends with shell name</td></tr>
+<tr><td><code>exploitation</code> (shellcode cmdline)</td><td>process_creation</td><td>CommandLine contains all of the pattern's discriminating tokens</td></tr>
+<tr><td><code>exploitation</code> (weblog)</td><td>webserver</td><td>cs-uri-query / cs-uri-stem contains the exploit signature (jndi: / classLoader / etc.)</td></tr>
+<tr><td><code>privesc</code></td><td>file_event / process_creation</td><td>TargetFilename + FileMode for setuid; Image=/setcap or /insmod for capability / kernel-module signals</td></tr>
+<tr><td><code>lateral</code></td><td>network_connection / process_creation / windows.security</td><td>Per-kind: outbound RFC1918, credential-dumper cmdline, lateral toolkit Image, SSH ProxyJump, or 4624 + NTLM + anonymous workstation (PtH)</td></tr>
+<tr><td><code>ad_attacks</code></td><td>windows.security / process_creation</td><td>Per-kind: 4769 RC4-HMAC, 4768 PreAuthType 0, 4662 replication-rights GUID, 5136 AdminSDHolder, BloodHound family Image-ends-with</td></tr>
+<tr><td><code>cloud_attacks</code></td><td>network_connection / process_creation / file_event</td><td>Per-kind: 169.254.169.254 DestinationIp, container-escape cmdline, kubeconfig file_event with kube-client filter, cloud-CLI cmdline</td></tr>
+<tr><td><code>counter_re</code></td><td>process_creation</td><td>Image ends with /gdb, /lldb, /x64dbg.exe, etc. AND CommandLine contains target-PID</td></tr>
+<tr><td><code>persistent_sessions</code></td><td>process_creation / file_event</td><td>Per-kind: tmux/screen/zellij parented by network-service Image; user-systemd file_event; nohup/setsid Image</td></tr>
+<tr><td><code>attacker_tooling</code></td><td>process_creation</td><td>Image ends with the specific tool binary name</td></tr>
+</tbody>
+</table>
+
+<p>Findings whose evidence doesn't map cleanly to a Sigma log source
+(<code>memory_anomaly</code>, <code>unsigned_binary</code>, browser
+extension permissions, etc.) are silently skipped — the generator
+returns None and the CLI reports the count delta.</p>
+
+<h2>Per-detector templates (<code>to_sigma_template()</code>)</h2>
+
+<p>The base <code>Detector</code> class exposes a
+<code>to_sigma_template()</code> classmethod. A detector that implements
+it declares a generic SIEM rule for the class of behavior it watches —
+independent of any specific case finding. The
+<code>--from-detectors</code> CLI flag iterates every registered
+detector and writes one rule per implementer.</p>
+
+<p>Every Decepticon-countermeasure detector ships a template; the test
+<code>tests/test_genrule_detector_templates.py</code> round-trips each
+generated rule through <code>SigmaLoader</code> to enforce validity.</p>
+
+<h2>Sample output</h2>
+
+<pre><code>title: 'Shai-Hulud compromised npm package: chalk@5.6.1'
+description: 'package on the worm list.
+  Auto-generated from digger finding ae6b2cac-b996-4a29-bc2e-15e86d4f5412.'
+id: 42ca0822-82c9-4ed2-a356-a8b4c051d4fa
+status: experimental
+author: digger
+date: 2026/05/21
+modified: 2026/05/21
+references:
+- digger-case://sigma-demo/ae6b2cac-b996-4a29-bc2e-15e86d4f5412
+level: critical
+tags:
+- attack.t1195.002
+- attack.initial_access
+- attack.supply_chain_compromise
+falsepositives:
+- Investigate context before alerting on this rule.
+logsource:
+  category: file_event
+detection:
+  selection:
+    TargetFilename|endswith: /node_modules/chalk/package.json
+    TargetFilename|contains: /node_modules/
+  filter_version:
+    TargetFilename|contains: '"version": "5.6.1"'
+  condition: selection AND filter_version</code></pre>
+
+<h2>From digger to your SIEM</h2>
+
+<p>The generated rules are standard SigmaHQ format. Feed them through
+<a href="https://github.com/SigmaHQ/sigma-cli">sigma-cli</a> /
+<a href="https://github.com/SigmaHQ/pySigma">pySigma</a> to compile to
+your SIEM's query language:</p>
+
+<pre><code># Splunk
+sigma convert -t splunk -p sysmon ./case-1/sigma-out/*.yml
+
+# Elastic
+sigma convert -t lucene -p ecs_windows ./case-1/sigma-out/*.yml
+
+# Microsoft Sentinel (KQL)
+sigma convert -t microsoft_sentinel ./case-1/sigma-out/*.yml
+
+# Chronicle (YARA-L)
+sigma convert -t chronicle ./case-1/sigma-out/*.yml</code></pre>
+
+<p>The Sigma <code>references</code> field carries
+<code>digger-case://&lt;case_id&gt;/&lt;finding_uuid&gt;</code> so the
+provenance survives every back-end conversion — if a deployed rule
+fires in production, an analyst can trace it back to the original
+investigation.</p>
+
+<h2>Detection-engineering workflow</h2>
+
+<pre><code># 1. Investigation produces findings on host-of-interest
+digger investigate --case-dir ./case-2026-05-21
+
+# 2. Auto-generate Sigma from the findings
+digger generate sigma --case-dir ./case-2026-05-21
+
+# 3. Review (pruning over-broad rules, tightening selectors)
+# 4. Commit to your detection-rules repo
+# 5. CI compiles for your SIEM and deploys
+# 6. The same kind of activity now fires on every host in scope</code></pre>
+
+<h2>Limits</h2>
+
+<ul>
+<li>Sigma can express log-pattern matching, not arbitrary correlation.
+  Findings that derive their signal from multi-artifact relationships
+  (timeline, persistence outlier with multiple paths) produce simpler
+  one-condition rules — review before deploying.</li>
+<li>Selectors generated from CLI patterns may be over-specific (catches
+  this exact malware, misses tomorrow's variant). The auto-generated
+  rule is a starting point, not a finished detection.</li>
+<li>Sigma's log-source vocabulary is finite. Memory-region anomalies,
+  signature mismatches, and browser-extension permission findings have
+  no canonical log source — these are explicitly not faked.</li>
+</ul>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

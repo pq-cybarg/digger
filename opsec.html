@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Operator opsec — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="opsec">
+<main>
+
+<h1>Operator opsec
+  <span class="subtitle">The rest of digger protects the evidence. This module protects the investigator: bundle encryption, redaction, counter-surveillance, air-gap mode, secure wipe, self-recognition.</span>
+</h1>
+
+<h2>Why this exists</h2>
+
+<p>Forensic investigators sometimes work on hosts where they themselves
+could be the target — live-response on a compromised endpoint, an
+engagement against an adversary with anti-forensics tooling, or just
+day-to-day handling of cases that contain sensitive identifying
+information. The opsec module covers:</p>
+
+<dl class="kv">
+  <dt>Confidentiality at rest</dt>
+  <dd>PQC-KEM + AES-256-GCM <strong>encrypted case bundles</strong>. One signed file, decryptable only by the intended recipient.</dd>
+
+  <dt>Confidentiality on share</dt>
+  <dd><strong>PII redaction</strong> — pseudonymize usernames / hostnames / private IPs / paths consistently across a whole case, with a reversible mapping kept separately.</dd>
+
+  <dt>Detecting observation</dt>
+  <dd><strong>Counter-surveillance</strong> — enumerate processes that may be watching the investigation: ptrace-attached debuggers, packet captures, EDR/AV agents, screen recorders, eBPF programs, TCC-permitted apps.</dd>
+
+  <dt>Network discipline</dt>
+  <dd><strong>Air-gap mode</strong> — refuse every outbound HTTP path (intel feeds, LLM triage, TAXII push) with an audit-loggable <code>AirgapViolation</code>.</dd>
+
+  <dt>Disposal</dt>
+  <dd><strong>Secure wipe</strong> — multi-pass overwrite then unlink of a case directory; refuses to wipe paths that don't look like digger cases.</dd>
+
+  <dt>Self-awareness</dt>
+  <dd><strong>Self-identification</strong> — every hunt and detector that might catch digger's own activity annotates the row with "this is digger" instead of producing a confusing alert.</dd>
+</dl>
+
+<h2>The commands</h2>
+
+<pre><code>digger opsec status                       # JSON dump of operator posture
+digger opsec watchers [-v]                # enumerate observers
+
+digger opsec encrypt --case-dir DIR --out BUNDLE.digger
+       --recipient PATH-TO-RECIPIENT-PUBKEY
+       [--kem-alg ML-KEM-768]
+       [--sign-key PATH-TO-SECRET-KEY [--sig-alg ML-DSA-65]]
+
+digger opsec decrypt --in BUNDLE.digger --key PATH-TO-SECRET-KEY
+       --out-dir RESTORE-PATH [--no-verify-sig]
+
+digger opsec redact --case-dir DIR --out-dir REDACTED
+       [--keep-hostnames] [--keep-usernames] [--keep-raw-blobs]
+       [--redact-public-ips]
+
+digger opsec wipe --case-dir DIR --yes [--passes 3]</code></pre>
+
+<p>Global flag:</p>
+
+<pre><code>digger --airgap &lt;any-command&gt;            # enter air-gap mode for this invocation
+DIGGER_AIRGAP=1 digger ...                # same, via env</code></pre>
+
+<h2>Encrypted bundles</h2>
+
+<p><code>digger opsec encrypt</code> compresses a whole case directory
+(tar.gz), wraps it with an AES-256-GCM key derived from a PQC-KEM-
+encapsulated shared secret, and writes a single <code>.digger</code>
+file. The header records the KEM algorithm, the recipient's public-key
+SHA-256 fingerprint, the case ID and the dual chain-tip hashes — so the
+recipient can verify the bundle binds to the chain state they expect.</p>
+
+<p>Optionally signs the entire header+ciphertext with a PQC signature
+(default ML-DSA-65, FIPS 204). Self-contained — the signing public key
+travels with the bundle, so verification is a single operation.</p>
+
+<pre><code># Generate a recipient ML-KEM-768 keypair (one-time)
+python -c "from digger.crypto import PQCBackend; b=PQCBackend(kem_alg='ML-KEM-768'); pk,sk=b.generate_kem_key(); open('recipient.pk','wb').write(pk); open('recipient.sk','wb').write(sk)"
+
+# Encrypt + sign (signing key was previously created by `digger pqc sign`)
+digger opsec encrypt --case-dir ./case-2026-05-21 \
+       --out case-2026-05-21.digger \
+       --recipient recipient.pk \
+       --sign-key /secrets/case-2026-05-21.sk
+
+# Decrypt + verify on the receiving end
+digger opsec decrypt --in case-2026-05-21.digger \
+       --key recipient.sk \
+       --out-dir ./restored/</code></pre>
+
+<p>FIPS mode (<code>--fips-mode</code>) restricts the choices to ML-KEM
++ ML-DSA / SLH-DSA / Falcon.</p>
+
+<h2>Redaction</h2>
+
+<p>For sharing a case with a vendor, ISAC, or partner CSIRT. The
+redactor walks every artifact and finding, applying consistent
+pseudonyms — same username always maps to the same <code>USER001</code>,
+private IPs to <code>PRIV-IP1</code>, hostnames to <code>HOST1</code>.
+The reversible map is written to <code>redaction_map.json</code> in the
+output directory; the case custodian keeps it separately to enable
+de-redaction if needed.</p>
+
+<p>Default policy (override with flags):</p>
+
+<table>
+<thead><tr><th>What</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>Emails</td><td>redacted</td></tr>
+<tr><td>MAC addresses</td><td>redacted</td></tr>
+<tr><td>Private IPs (RFC 1918, loopback excluded)</td><td>redacted</td></tr>
+<tr><td>Public IPs</td><td><strong>kept</strong> (often intel-relevant)</td></tr>
+<tr><td>Usernames in home-dir paths</td><td>redacted</td></tr>
+<tr><td>Hostnames in case meta</td><td>redacted</td></tr>
+<tr><td>AWS 12-digit account IDs</td><td>redacted</td></tr>
+<tr><td>Raw blob fields (raw, contents, tail, lines)</td><td>dropped</td></tr>
+<tr><td>Environment-variable values</td><td>dropped (keys kept)</td></tr>
+</tbody>
+</table>
+
+<p>The dual chain hash is regenerated from the redacted content so the
+output passes <code>digger verify</code> as a valid (different) case.</p>
+
+<h2>Counter-surveillance</h2>
+
+<p><code>digger opsec watchers</code> enumerates processes whose presence
+implies someone is observing the host or the investigation:</p>
+
+<table>
+<thead><tr><th>Category</th><th>What it catches</th><th>Severity</th></tr></thead>
+<tbody>
+<tr><td><strong>debugger</strong></td><td>gdb, lldb, dtrace, strace, ltrace, rr, plus an explicit ptrace check on Linux (TracerPid on our own /proc/self/status)</td><td>high</td></tr>
+<tr><td><strong>packet_capture</strong></td><td>tcpdump, tshark, wireshark, dumpcap, ngrep — every byte digger sends is being recorded</td><td>high</td></tr>
+<tr><td><strong>edr</strong></td><td>CrowdStrike, SentinelOne, Carbon Black, Defender ATP, Sysmon, osquery, Velociraptor, ESET, Sophos, …</td><td>medium</td></tr>
+<tr><td><strong>recorder</strong></td><td>OBS, Loom, ScreenFlow, Snagit, Camtasia, QuickTime screen capture</td><td>medium</td></tr>
+<tr><td><strong>ebpf</strong></td><td>Active eBPF programs attached (via <code>bpftool prog list</code>)</td><td>medium</td></tr>
+<tr><td><strong>audit</strong></td><td>auditd, splunkd, splunk-forwarder, rsyslog, audit/log shippers</td><td>low</td></tr>
+<tr><td><strong>tcc</strong></td><td>macOS apps with <code>kTCCServiceScreenCapture</code> permission</td><td>low</td></tr>
+</tbody>
+</table>
+
+<p>Discovery only — no process is touched. The presence of a watcher
+doesn't mean digger is being targeted; it means the analyst should know
+what's running and adjust opsec accordingly (kill the screen recorder,
+disable EDR's data forwarding, switch to a write-blocked image, etc.).</p>
+
+<h2>Air-gap mode</h2>
+
+<p>Every network-egress path in digger is gated by
+<code>assert_network_allowed()</code>. With <code>--airgap</code> on,
+attempts raise <code>AirgapViolation</code> and increment a counter the
+status command surfaces:</p>
+
+<pre><code>$ DIGGER_AIRGAP=1 digger intel update --only cisa_kev
+digger.opsec.airgap.AirgapViolation: air-gap mode is enabled;
+refusing network operation: intel-feed:cisa_kev
+
+$ digger opsec status
+{
+  "airgap": {
+    "enabled": true,
+    "attempted_violations": 1,
+    "last_violation": "intel-feed:cisa_kev"
+  }, ...
+}</code></pre>
+
+<p>Gated call-sites: every intel feed fetcher, the LLM chat client, every
+TAXII GET/POST. The opsec module itself is fully local.</p>
+
+<h2>Self-identification</h2>
+
+<p>When a hunt or detector catches a row that's actually digger doing its
+job (e.g. <code>interpreter-in-temp</code> catching python invoking
+<code>digger collect --case-dir /tmp/...</code>), the row is rendered
+with a green diamond marker and an explicit <code>self</code> column
+("digger via python [collect]") instead of silently filtering. The signal
+isn't lost — it's just clearly labeled.</p>
+
+<p>Available to your own hunts:</p>
+
+<pre><code>from digger.opsec.self_id import identify
+attribution = identify(process_data_dict)
+# → "digger via python [scan]"  or  None</code></pre>
+
+<h2>Secure wipe</h2>
+
+<p>Multi-pass random overwrite then unlink. Refuses any path that
+doesn't contain a digger sentinel file (<code>evidence.db</code> or
+<code>chain_of_custody.json</code>) as a safety check — you can't
+accidentally wipe <code>~/</code>.</p>
+
+<blockquote class="warn">
+<strong>SSD caveat.</strong> On modern flash storage with wear-leveling
+controllers, block-level overwrite is best-effort. Adversaries with
+physical access to the disk can recover overwritten blocks via the
+controller's spare-block pool. For real confidentiality at rest on
+SSDs, rely on full-disk encryption rather than overwrite.
+</blockquote>
+
+<h2>Status</h2>
+
+<p><code>digger opsec status</code> returns a JSON snapshot suitable for
+piping into <code>jq</code> or aggregating in a fleet view. Includes:
+FIPS posture, air-gap state + violation counter, traffic summary,
+digger's own PIDs (per <code>self_id</code>), watcher rollup by category
++ full details of high-severity watchers.</p>
+
+<h2>Putting it together — a paranoid run</h2>
+
+<pre><code>digger --fips-mode --airgap \
+       --classification "Confidential" \
+       --tlp TLP:AMBER+STRICT \
+       investigate --case-dir ./case-2026-05-21
+
+digger opsec watchers           # check who saw the run
+digger opsec encrypt --case-dir ./case-2026-05-21 \
+       --out case-2026-05-21.digger \
+       --recipient /secrets/peer.pk \
+       --sign-key /secrets/operator.sk
+digger opsec wipe --case-dir ./case-2026-05-21 --yes
+# bundle is the only artifact left</code></pre>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

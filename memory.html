@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Memory forensics — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="memory">
+<main>
+
+<h1>Memory forensics
+  <span class="subtitle">Live VM region inspection, anomaly detection, optional YARA-on-memory. Cross-platform: Linux /proc, macOS vmmap, Windows ctypes.</span>
+</h1>
+
+<h2>What it catches</h2>
+
+<p>Snapshot-mode memory forensics can't do Volatility-grade reconstruction
+(that needs a full dumped image and a profile), but it gets you the
+three highest-signal indicators visible from VM region metadata alone:</p>
+
+<table>
+<thead><tr><th>Indicator</th><th>What it means</th><th>Severity</th></tr></thead>
+<tbody>
+<tr><td><strong>RWX regions</strong></td>
+    <td>A page is simultaneously readable, writable, and executable. Some JIT runtimes do this legitimately (V8, .NET, Lua, Java HotSpot tier-up) but a plain native process holding RWX pages is a strong process-injection tell.</td>
+    <td><span class="pill high">high</span></td></tr>
+<tr><td><strong>Anonymous executable regions</strong></td>
+    <td>An executable VM region with no on-disk file backing. Shellcode landing pads look exactly like this — bytes mapped via <code>mmap(PROT_EXEC)</code> with no file behind them.</td>
+    <td><span class="pill med">medium</span></td></tr>
+<tr><td><strong>Library loaded from a drop location</strong></td>
+    <td>A module mapped from <code>/tmp</code>, <code>/Users/Shared</code>, <code>%TEMP%</code>, etc. Sideloaded malicious dylibs/DLLs appear here.</td>
+    <td><span class="pill high">high</span></td></tr>
+</tbody>
+</table>
+
+<p>The <code>memory_anomaly</code> detector fires one finding per category
+per process, attached to the <code>memory_regions</code> artifact from
+that process. The collector emits at most 200 suspect regions per
+process; the full region map can run into tens of thousands of pages on
+something like Chrome.</p>
+
+<h2>Standard pipeline</h2>
+
+<p>Memory collection runs as part of <code>digger collect</code> by
+default — the new <code>memory_regions</code> collector iterates every
+PID the user can read and records suspect regions. The anomaly detector
+then runs as part of <code>digger scan</code>.</p>
+
+<pre><code>digger collect --case-dir ./case-1
+digger scan    --case-dir ./case-1
+# memory_anomaly findings appear alongside everything else</code></pre>
+
+<p>To skip memory collection (it's the slowest collector on a busy host):</p>
+
+<pre><code>digger collect --case-dir ./case-1 --only system,env,processes,network</code></pre>
+
+<h2>Ad-hoc CLI</h2>
+
+<pre><code># Scan every readable process and report suspect regions
+digger memory scan
+
+# Limit to one PID and add YARA on the dumped bytes
+digger memory scan --pid 4242 --yara
+
+# Dump every suspect region of one PID to disk for offline analysis
+digger memory dump --pid 4242 --out-dir ./dumps
+
+# Dump a specific region by start address
+digger memory dump --pid 4242 --addr 0x7f1234500000 --out-dir ./dumps</code></pre>
+
+<p>Output of <code>memory scan</code>:</p>
+
+<pre><code>pid=4242 evil — 2 suspect region(s) of 87 total
+  rwxp 0x00007f1234500000-0x00007f1234504000 (    16384 B) [RWX,ANON-EXEC           ] [anon]
+  r-xp 0x00007f5678a00000-0x00007f5678a20000 (   131072 B) [DROP-BACKED             ] /tmp/.cache/lib.so</code></pre>
+
+<h2>YARA on memory</h2>
+
+<p>When <code>--yara</code> is set, each dumped region is matched against
+the bundled YARA rules (<code>digger/rules/yara/</code>) plus the
+signature-base YARA corpus if you've run <code>digger loki update</code>.
+Matches print under each region:</p>
+
+<pre><code>  rwxp 0x… — [ANON-EXEC] [anon]
+     YARA: rule=digger_mimikatz_strings tags=['credential']
+     YARA: rule=APT_Cobalt_Strike_Beacon tags=['actor', 'apt']</code></pre>
+
+<p>YARA on memory finds things YARA-on-disk can't: unpacked payloads,
+in-memory keys, deobfuscated strings.</p>
+
+<h2>Permissions &amp; platform support</h2>
+
+<table>
+<thead><tr><th></th><th>Region info</th><th>Byte dumps</th></tr></thead>
+<tbody>
+<tr><td><strong>Linux</strong></td>
+    <td><code>/proc/[pid]/maps</code> — own user can read own processes; root reads all</td>
+    <td><code>/proc/[pid]/mem</code> — needs <code>CAP_SYS_PTRACE</code> (root or yama ptrace_scope ≤ 0)</td></tr>
+<tr><td><strong>macOS</strong></td>
+    <td><code>vmmap</code> — works for own user</td>
+    <td>Not supported (would require lldb attachment). Region anomaly detection only.</td></tr>
+<tr><td><strong>Windows</strong></td>
+    <td><code>OpenProcess</code> + <code>VirtualQueryEx</code> via ctypes — best-effort</td>
+    <td><code>ReadProcessMemory</code> — needs <code>SeDebugPrivilege</code> (admin)</td></tr>
+</tbody>
+</table>
+
+<p>The collector gracefully degrades: processes whose maps can't be
+read are silently skipped (logged at info level). It never raises.</p>
+
+<h2>What's NOT included</h2>
+
+<ul>
+<li><strong>Full memory imaging.</strong> No <code>winpmem</code> / LiME-
+  style raw RAM capture. The bytes you get are per-region read-only
+  snapshots, not a single coherent image.</li>
+<li><strong>Pool tag scanning / kernel object reconstruction.</strong>
+  Reserved for proper Volatility / Rekall workflows.</li>
+<li><strong>Page-protection history.</strong> We see current
+  permissions, not what they were when the page was first allocated —
+  so a region that <em>used</em> to be RW and was then <code>mprotect()</code>'d
+  to RX (a classic injection pattern) looks identical to a region that
+  was always RX. Live monitoring would catch the transition; snapshot
+  cannot.</li>
+<li><strong>Per-thread stacks.</strong> Anonymous executable thread
+  stacks are surfaced; per-thread CPU state isn't.</li>
+</ul>
+
+<h2>Programmatic API</h2>
+
+<pre><code>from digger.memory import (
+    list_regions_for_pid, list_regions_for_all_pids,
+    dump_region, yara_scan_region, can_dump_pid,
+)
+
+# Snapshot one process
+regions = list_regions_for_pid(4242)
+for r in regions:
+    if r.is_rwx or r.is_anonymous_exec:
+        print(r.perms, hex(r.start), r.size, r.backing)
+
+# Best-effort byte dump (works on Linux as root, Windows with SeDebugPrivilege)
+ok, reason = can_dump_pid(4242)
+if ok:
+    for r in regions:
+        if r.is_anonymous_exec:
+            data = dump_region(r)
+            # ... your own analysis here ...
+            hits = yara_scan_region(r)
+            for h in hits:
+                print("yara:", h["rule"], h["tags"])</code></pre>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

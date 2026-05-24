@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>digger — cross-platform endpoint forensics</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+</head>
+<body data-page="index">
+<main>
+
+<section class="hero">
+  <img src="logo.svg" alt="digger logo" width="120" height="140">
+  <div class="h-text">
+    <h1>digger</h1>
+    <p>
+      A cross-platform, forensics-grade endpoint investigation suite.
+      Collects artifacts from Windows, macOS, and Linux into a tamper-evident
+      evidence store, runs a stack of behavioral + intel-driven detectors,
+      triages findings with a local LLM under IC analytic-tradecraft
+      standards, and produces NIST/ISO/CMMC-aware reports.
+    </p>
+    <p style="margin-top:14px">
+      <a class="tag" href="getting-started.html">install →</a>
+      <a class="tag" href="architecture.html">how it works</a>
+      <a class="tag" href="cli.html">cli reference</a>
+      <a class="tag" href="sample-report.html" target="_blank">view a sample report ↗</a>
+    </p>
+  </div>
+</section>
+
+<figure class="diagram">
+  <img src="pipeline.svg" alt="digger pipeline diagram">
+</figure>
+
+<h2>What it does, in one screen</h2>
+
+<div class="cards">
+  <a class="card" href="collectors.html">
+    <h3>1. Collect</h3>
+    <p>~30 platform-aware collectors pull processes, network state, persistence,
+    browsers, logs, services, packages — into a hash-chained SQLite store.</p>
+  </a>
+  <a class="card" href="detectors.html">
+    <h3>2. Detect</h3>
+    <p>28 detectors: suspicious processes, persistence outliers, LOLBins,
+    YARA/IOC/Sigma, C2 frameworks, Shai-Hulud, supply-chain (live KEV),
+    named threat actors, browser, env hijacks, service-version CVE,
+    firewall audit, plus 9 <a href="decepticon-counter.html">Decepticon
+    countermeasures</a> covering recon → exploitation → privesc → lateral
+    → AD attacks → cloud → counter-RE → persistent sessions → attacker
+    tooling.</p>
+  </a>
+  <a class="card" href="intel.html">
+    <h3>3. Continuously poll intel</h3>
+    <p>15 feeds (CISA KEV, abuse.ch URLhaus/ThreatFox/MalwareBazaar, Tor exit,
+    Spamhaus, OpenSSF malicious-packages, Shai-Hulud, GitHub Advisory DB,
+    NVD CPE-keyed CVEs, SigmaHQ rule corpus, MITRE ATT&amp;CK STIX)
+    with per-feed cadences and conditional fetches. Live-first convention
+    statically enforced.</p>
+  </a>
+  <a class="card" href="ai-triage.html">
+    <h3>4. AI triage</h3>
+    <p>OpenAI-compatible local LLM (llama.cpp / ollama / vllm). Output is
+    schema-enforced under ICD 203 + NATO Admiralty + TLP — estimative
+    probability, analytic confidence, source reliability, IOCs, MITRE.</p>
+  </a>
+  <a class="card" href="pqc.html">
+    <h3>5. Post-quantum sign</h3>
+    <p>liboqs-backed PQC. Every NIST PQC algorithm — FIPS-finalized
+    (ML-KEM, ML-DSA, SLH-DSA, Falcon), Round 4 (HQC, BIKE, McEliece), and
+    signature on-ramp (CROSS, MAYO, SNOVA, SQIsign, …). Hybrid encryption
+    with AES-256-GCM.</p>
+  </a>
+  <a class="card" href="compliance.html">
+    <h3>6. Compliance &amp; report</h3>
+    <p>Map findings to 18 frameworks (NIST 800-53/171, CSF 2.0, CMMC,
+    FedRAMP High, ICD 503, ISO 27001/27037, CIS, DISA STIG, PCI-DSS,
+    HIPAA, GDPR, NIS 2, Essential 8, SOC 2). Export to STIX 2.1 / MISP /
+    ATT&amp;CK Navigator / TAXII.</p>
+  </a>
+</div>
+
+<h2>Five-minute orientation</h2>
+
+<pre><code># install
+pip install -e ".[all]"
+
+# run a full investigation: collect + scan + triage + report
+digger investigate --case-dir ./case-1 --report ./case-1/report.html
+
+# launch these docs
+./docs.sh</code></pre>
+
+<h2>Principles</h2>
+
+<dl class="kv">
+  <dt>Evidence first</dt>
+  <dd>Every component reads or writes a single, hash-chained SQLite
+      <a href="evidence-store.html">evidence store</a>. Nothing communicates
+      out-of-band. Append-only. Verifiable. Signable with PQC.</dd>
+
+  <dt>Local by default</dt>
+  <dd>No cloud calls. Intel feeds are explicit GETs the user opts into.
+      LLM triage runs on a process the user owns.</dd>
+
+  <dt>Algorithm-agile</dt>
+  <dd>PQC algorithms come from whatever liboqs exposes at runtime, not a
+      hard-coded list. New NIST candidates are picked up by upgrading
+      liboqs.</dd>
+
+  <dt>Graceful degradation</dt>
+  <dd>A collector that can't read a file, a detector that needs a missing
+      Python package, an LLM that's offline — all log and move on. The
+      tool never aborts a case because of a partial environment.</dd>
+
+  <dt>Forensically sound</dt>
+  <dd>Paired SHA-256 + SHA3-256 hash chain across artifacts and findings. ISO/IEC 27037 +
+      NIST SP 800-86 chain-of-custody record alongside the DB. Optional
+      PQC signature over the chain tip. TLP markings on every finding.</dd>
+</dl>
+
+<h2>Where to next</h2>
+
+<div class="cards">
+  <a class="card" href="getting-started.html">
+    <h3>Getting started →</h3>
+    <p>Install, first case, llama.cpp setup, common flags.</p>
+  </a>
+  <a class="card" href="architecture.html">
+    <h3>Architecture →</h3>
+    <p>How the pipeline fits together, what each module is responsible for.</p>
+  </a>
+  <a class="card" href="extending.html">
+    <h3>Extending →</h3>
+    <p>Writing a new collector, detector, compliance framework, or intel feed.</p>
+  </a>
+  <a class="card" href="forensics-grade.html">
+    <h3>Forensics-grade →</h3>
+    <p>Chain of custody, hash chain, PQC signing, evidence handling.</p>
+  </a>
+</div>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

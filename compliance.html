@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compliance frameworks — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="compliance">
+<main>
+
+<h1>Compliance frameworks
+  <span class="subtitle">18 catalogs mapped to machine-checkable predicates against collected evidence.</span>
+</h1>
+
+<h2>What digger does</h2>
+
+<p>Every framework lives as a YAML catalog under
+<code>digger/compliance/frameworks/&lt;name&gt;.yaml</code>. Each control may
+declare zero or more <em>checks</em> — small predicates digger can evaluate
+automatically against the artifacts and findings already in the evidence
+store. The assessor reduces multiple checks per control to one of:</p>
+
+<table>
+<thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><span class="pill ok">pass</span></td><td>All checks evaluated to true</td></tr>
+<tr><td><span class="pill high">fail</span></td><td>All checks failed</td></tr>
+<tr><td><span class="pill med">partial</span></td><td>Mixture — some checks pass, some fail</td></tr>
+<tr><td><span class="pill low">manual</span></td><td>Control lists <code>manual: true</code> or has no machine-checkable predicate</td></tr>
+</tbody>
+</table>
+
+<p>Controls that require human review (policy, training, business continuity)
+are honestly reported as <code>manual</code>. Don't trust any tool that
+claims to mechanically score them.</p>
+
+<h2>Bundled frameworks</h2>
+
+<table>
+<thead><tr><th>ID</th><th>Title</th><th>Origin</th></tr></thead>
+<tbody>
+<tr><td><code>nist_800_53</code></td><td>NIST SP 800-53 Rev. 5</td><td>NIST</td></tr>
+<tr><td><code>nist_800_171</code></td><td>NIST SP 800-171 Rev. 3 (CUI protection)</td><td>NIST</td></tr>
+<tr><td><code>nist_csf_2</code></td><td>NIST Cybersecurity Framework 2.0</td><td>NIST</td></tr>
+<tr><td><code>cmmc_2_0</code></td><td>Cybersecurity Maturity Model Certification 2.0</td><td>DoD</td></tr>
+<tr><td><code>fedramp_high</code></td><td>FedRAMP High Baseline</td><td>GSA</td></tr>
+<tr><td><code>icd_503</code></td><td>ICD 503 — IC IT systems security risk management</td><td>ODNI</td></tr>
+<tr><td><code>iso_27001</code></td><td>ISO/IEC 27001:2022 (Annex A)</td><td>ISO</td></tr>
+<tr><td><code>iso_27037</code></td><td>ISO/IEC 27037:2012 — digital evidence handling</td><td>ISO</td></tr>
+<tr><td><code>cis_macos</code></td><td>CIS Apple macOS Sonoma Benchmark</td><td>CIS</td></tr>
+<tr><td><code>cis_linux</code></td><td>CIS Distribution-Independent Linux Benchmark</td><td>CIS</td></tr>
+<tr><td><code>cis_windows</code></td><td>CIS Microsoft Windows 11 Enterprise Benchmark</td><td>CIS</td></tr>
+<tr><td><code>disa_stig_general</code></td><td>DISA STIG — General OS (cross-platform subset)</td><td>DISA</td></tr>
+<tr><td><code>pci_dss_4_0</code></td><td>PCI DSS 4.0.1</td><td>PCI SSC</td></tr>
+<tr><td><code>hipaa_security_rule</code></td><td>HIPAA Security Rule (45 CFR 160 / 164)</td><td>HHS / OCR</td></tr>
+<tr><td><code>gdpr</code></td><td>EU GDPR 2016/679 (Articles 25, 32, 33, 35)</td><td>EU</td></tr>
+<tr><td><code>nis2</code></td><td>EU NIS 2 Directive (2022/2555)</td><td>EU</td></tr>
+<tr><td><code>essential_eight</code></td><td>ACSC Essential Eight</td><td>ACSC / ASD</td></tr>
+<tr><td><code>soc2_tsc</code></td><td>SOC 2 Trust Services Criteria (CC §6-7)</td><td>AICPA</td></tr>
+</tbody>
+</table>
+
+<p>Most catalogs are <em>high-impact subsets</em> of the source documents,
+focused on endpoint-observable controls. To extend any of them, drop more
+entries into the YAML — no code change required.</p>
+
+<h2>Predicate vocabulary</h2>
+
+<p>A control can declare any combination of these checks:</p>
+
+<dl class="kv">
+  <dt>artifact_present</dt><dd>Pass iff at least one artifact from the named collector exists. e.g. <code>artifact_present: linux.audit</code></dd>
+  <dt>artifact_count_min</dt><dd>Pass iff the named collector produced ≥ N artifacts. e.g. <code>artifact_count_min: {processes: 10}</code></dd>
+  <dt>no_finding_with_detector</dt><dd>Pass iff no finding was emitted by the named detector. e.g. <code>no_finding_with_detector: c2</code></dd>
+  <dt>no_finding_with_mitre</dt><dd>Pass iff no finding carries the given MITRE technique prefix.</dd>
+  <dt>no_finding_above</dt><dd>Pass iff no finding exceeds the named severity. e.g. <code>no_finding_above: medium</code></dd>
+  <dt>data_contains</dt><dd>Regex search over a collector's artifacts. e.g. matching <code>"FileVault is On"</code> in <code>macos.security_posture</code>'s <code>fdesetup-status</code> raw output.</dd>
+  <dt>manual: true</dt><dd>Explicitly flag this control as requiring human review.</dd>
+</dl>
+
+<h2>Running assessments</h2>
+
+<pre><code>$ digger compliance list
+  cis_linux                        CIS Distribution-Independent Linux Benchmark
+  cis_macos                        CIS Apple macOS 14.x Sonoma Benchmark
+  ...
+
+$ digger compliance assess --case-dir ./case-1
+
+NIST_SP_800_53_Rev5 (Rev 5.1.1) — 22 controls
+      pass: 10
+      fail: 2
+    manual: 8
+   partial: 2
+
+ISO_IEC_27001_2022 (2022) — 11 controls
+      pass: 5
+      fail: 2
+    manual: 4
+
+ACSC_Essential_Eight (November 2023) — 8 controls
+      pass: 5
+    manual: 3
+
+reports written to ./case-1/compliance/</code></pre>
+
+<p>One report per framework is written: <code>&lt;framework&gt;.html</code>,
+<code>.md</code>, and <code>.json</code> (use <code>--format html</code> /
+<code>--format json</code> / <code>--format all</code> to control which).</p>
+
+<h2>Cross-framework mapping</h2>
+
+<p>Each catalog can declare <code>mapping_to_other_frameworks</code> — a
+hash of (target framework → control-id → list of equivalent control ids).
+For example:</p>
+
+<pre><code>mapping_to_other_frameworks:
+  CMMC_2_0:
+    AU-2: ["AU.L2-3.3.1"]
+    AC-6: ["AC.L2-3.1.5"]
+  ISO_27001:
+    AU-2: ["A.8.15"]
+    SC-13: ["A.8.24"]</code></pre>
+
+<p>This lets findings raised against one framework be referenced from another
+without duplicating the rule logic.</p>
+
+<h2>Adding a framework</h2>
+
+<p>Drop a YAML file under <code>digger/compliance/frameworks/</code>. Minimum
+shape:</p>
+
+<pre><code>id: MY_FRAMEWORK
+title: My Internal Baseline
+version: "1.0"
+publisher: Acme Security
+url: https://internal.example/baseline
+description: |
+  Internal baseline derived from NIST CSF and CIS Linux.
+controls:
+  - id: BASELINE-01
+    title: All accounts have unique IDs
+    family: identity
+    severity_if_failed: high
+    checks:
+      - artifact_present: users
+  - id: BASELINE-02
+    title: No active C2 indicators
+    family: integrity
+    severity_if_failed: critical
+    checks:
+      - no_finding_with_detector: c2
+  - id: BASELINE-03
+    title: Documented IR plan
+    family: process
+    severity_if_failed: medium
+    checks: [{manual: true}]</code></pre>
+
+<p>Next run of <code>digger compliance list</code> will include it. No code
+to write.</p>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SOC 2 audit prep — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="soc2">
+<main>
+
+<h1>SOC 2 audit prep
+  <span class="subtitle">All AICPA Trust Services Criteria — CC1-CC9 plus Availability, Confidentiality, Processing Integrity, and Privacy — wired to checkable predicates.</span>
+</h1>
+
+<h2>What digger contributes to a SOC 2</h2>
+
+<p>SOC 2 reports (Type I or Type II) attest to the design — and for Type II,
+the operating effectiveness over a 3-12 month window — of a service
+organization's controls against the AICPA Trust Services Criteria. The
+Security category (the Common Criteria, CC1-CC9) is always in scope; the
+Additional Criteria (Availability, Confidentiality, Processing Integrity,
+Privacy) are included when the engagement scope requires them.</p>
+
+<p>digger isn't a SOC 2 GRC platform. It's the <em>technical evidence</em>
+half: an auditable, hash-chained record of the endpoint controls actually
+operating during the audit window. Combined with your policy
+documentation, training records, and ticketing data, digger output forms
+defensible evidence for a meaningful subset of TSC criteria.</p>
+
+<h2>The bundled SOC 2 catalog</h2>
+
+<p>58 controls across all 20 TSC families. Run a posture check:</p>
+
+<pre><code>digger compliance assess --case-dir ./case-1 --frameworks soc2_tsc
+
+SOC2_TSC_2017 (2017 ...) — 58 controls
+      pass: 22
+      fail: 3
+   partial: 4
+    manual: 29</code></pre>
+
+<p>The <code>manual</code> entries are controls that depend on governance,
+policy, HR, or audit trail outside the endpoint. Don't trust any tool that
+claims to mechanically score CC1.1 ("Demonstrates commitment to integrity
+and ethical values").</p>
+
+<h2>Coverage by TSC family</h2>
+
+<table>
+<thead><tr><th>Family</th><th>What it covers</th><th>How digger evidences it</th></tr></thead>
+<tbody>
+<tr><td><strong>CC1</strong> Control Environment</td>
+    <td>5 controls — COSO Principles 1-5 (integrity, board oversight, structure, competence, accountability)</td>
+    <td>All <code>manual</code>. Pair with HR records and the security policy library.</td></tr>
+<tr><td><strong>CC2</strong> Communication and Information</td>
+    <td>3 controls — internal/external info flow</td>
+    <td>All <code>manual</code>. Pair with onboarding/training records.</td></tr>
+<tr><td><strong>CC3</strong> Risk Assessment</td>
+    <td>4 controls — risk identification, change impact</td>
+    <td>CC3.2 (risks identified) is checked against the <code>supply_chain</code> and <code>shai_hulud</code> detectors — outstanding findings = unmanaged risk.</td></tr>
+<tr><td><strong>CC4</strong> Monitoring Activities</td>
+    <td>2 controls — ongoing evaluation and communication of deficiencies</td>
+    <td>CC4.1 requires evidence of monitoring; digger's own artifact collection of <code>processes</code> + <code>network</code> proves the monitoring activity occurred.</td></tr>
+<tr><td><strong>CC5</strong> Control Activities</td>
+    <td>3 controls — control selection, IT general controls, policy deployment</td>
+    <td>CC5.2 (IT general controls) checks <code>installed_software</code> inventory + no persistence outliers.</td></tr>
+<tr><td><strong>CC6</strong> Logical &amp; Physical Access</td>
+    <td>8 controls — credential lifecycle, external defenses, malware protection</td>
+    <td>Strongest digger coverage. CC6.1 maps to <code>users</code> + no SSH backdoor findings; CC6.6 to no C2 / threat-actor matches; CC6.7 to no env hijack; CC6.8 to no YARA / Shai-Hulud / LOKI hits.</td></tr>
+<tr><td><strong>CC7</strong> System Operations</td>
+    <td>5 controls — vulnerability monitoring, anomaly response, incident response</td>
+    <td>CC7.1 wired to <code>supply_chain</code> (KEV cross-check); CC7.2 to artifact presence + no high-severity findings; CC7.3-CC7.5 are <code>manual</code> (IR process attestation).</td></tr>
+<tr><td><strong>CC8</strong> Change Management</td>
+    <td>1 control — authorized, documented, tested changes</td>
+    <td><code>manual</code>. Pair with your ticketing system + deployment audit log.</td></tr>
+<tr><td><strong>CC9</strong> Risk Mitigation</td>
+    <td>2 controls — disruption response, vendor risk</td>
+    <td>CC9.2 (vendor risk) checked via supply_chain + shai_hulud — open-source dependency hygiene is a vendor-risk control under SOC 2.</td></tr>
+<tr><td><strong>A1</strong> Availability</td>
+    <td>3 controls — capacity, environmental protection, recovery</td>
+    <td>A1.1 checks <code>system</code> artifact (boot/uptime/capacity). A1.2/A1.3 <code>manual</code>.</td></tr>
+<tr><td><strong>C1</strong> Confidentiality</td>
+    <td>2 controls — confidential data identification and disposal</td>
+    <td>All <code>manual</code>. Pair with data-classification register.</td></tr>
+<tr><td><strong>PI1</strong> Processing Integrity</td>
+    <td>5 controls — input, processing, output integrity</td>
+    <td>All <code>manual</code>. Pair with application-level audit log analysis.</td></tr>
+<tr><td><strong>P1-P8</strong> Privacy</td>
+    <td>14 controls — notice, consent, collection, use, access, disclosure, quality, monitoring</td>
+    <td>All <code>manual</code>. Pair with privacy notice, data-subject request log, breach notification process.</td></tr>
+</tbody>
+</table>
+
+<h2>A defensible Type II evidence workflow</h2>
+
+<p>For a 6-month Type II window, digger should run on every in-scope
+endpoint on a fixed schedule — typically weekly or bi-weekly. Each run
+contributes one PQC-signed case directory to the audit evidence
+repository:</p>
+
+<pre><code>#!/bin/bash
+# /usr/local/bin/digger-soc2-run.sh
+set -euo pipefail
+
+CASE_DIR="/var/lib/digger/soc2/$(date -u +%Y-%m-%dT%H%M%SZ)"
+KEY=/var/lib/digger/keys/soc2.sk
+
+digger --no-banner \
+       --classification "Confidential" \
+       --tlp TLP:AMBER+STRICT \
+       investigate --case-dir "$CASE_DIR" \
+       --report "$CASE_DIR/report.html"
+
+digger --no-banner compliance assess \
+       --case-dir "$CASE_DIR" \
+       --frameworks soc2_tsc
+
+digger --no-banner pqc sign \
+       --case-dir "$CASE_DIR" \
+       --algorithm ML-DSA-65 \
+       --key "$KEY" \
+       --note "SOC 2 Type II evidence run, host=$(hostname)"
+
+# upload to your immutable evidence store (S3 Object Lock, etc.)
+aws s3 sync "$CASE_DIR" "s3://soc2-evidence/$(hostname)/$(basename "$CASE_DIR")/" \
+    --storage-class GLACIER_IR</code></pre>
+
+<p>Schedule via systemd timer or cron. Verify the chain at audit time:</p>
+
+<pre><code>digger verify --case-dir /var/lib/digger/soc2/2026-03-15T120000Z
+digger pqc verify --case-dir /var/lib/digger/soc2/2026-03-15T120000Z</code></pre>
+
+<h2>What the auditor will ask for</h2>
+
+<dl class="kv">
+  <dt>Sampling</dt>
+  <dd>Auditors test a sample of dates across the window. Run digger at
+      least weekly so any chosen sample date has corresponding evidence.</dd>
+
+  <dt>Tamper resistance</dt>
+  <dd>The hash chain (<code>digger verify</code>) plus a PQC signature
+      (<code>digger pqc sign</code>) demonstrates the evidence wasn't
+      modified after collection. Store the public key separately from
+      the case directories.</dd>
+
+  <dt>Sequence of events</dt>
+  <dd>The <code>chain_of_custody.json</code> sidecar records every
+      operation. It's a per-case audit log distinct from the evidence
+      itself, satisfying the "auditability" requirement (ISO 27037 §6.3)
+      that SOC 2 auditors increasingly look for.</dd>
+
+  <dt>Coverage assertion</dt>
+  <dd>The compliance assessor report lists every TSC control and the
+      specific check that produced its status. Hand this directly to the
+      auditor as evidence of automated coverage; supply your policy
+      docs for the <code>manual</code> ones.</dd>
+</dl>
+
+<h2>Cross-framework mapping</h2>
+
+<p>The SOC 2 catalog includes mappings to NIST 800-53, ISO 27001:2022, and
+PCI DSS 4.0. If your organization also has a NIST 800-171 / CMMC or ISO
+27001 program, digger can produce all of those reports off the same
+evidence:</p>
+
+<pre><code>digger compliance assess --case-dir ./case-1 \
+       --frameworks soc2_tsc,nist_800_53,iso_27001,pci_dss_4_0</code></pre>
+
+<h2>Things SOC 2 needs that digger can't provide on its own</h2>
+
+<p>These are deliberate scope choices. Pair digger with:</p>
+
+<ul>
+<li><strong>Identity provider audit logs</strong> (Okta, Entra ID, JumpCloud)
+   — for CC6.2 / CC6.3 evidence of authorization and provisioning workflow.</li>
+<li><strong>HR system</strong> — for CC1.4 / CC1.5 personnel evidence.</li>
+<li><strong>Change management system</strong> (Jira, Linear, ServiceNow)
+   — for CC8.1 change-authorization evidence.</li>
+<li><strong>Vulnerability management</strong> for application-layer CVEs
+   that aren't in the endpoint's installed-software inventory.</li>
+<li><strong>Backup / DR exercise records</strong> — for A1.3.</li>
+<li><strong>Penetration test reports</strong> — for the auditor's risk
+   assessment review under CC3.</li>
+<li><strong>Privacy impact assessments</strong> — for P1-P8.</li>
+</ul>
+
+<h2>SOC 2 + the rest of the stack</h2>
+
+<p>If your engagement also names HIPAA, PCI DSS, or ISO 27001, run all of
+them together. Most TSC controls share evidence — the assessor will
+catch and reuse it. See <a href="compliance.html">the compliance
+overview</a> for the full bundled-framework list.</p>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

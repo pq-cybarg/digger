@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live threat intel — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="intel">
+<main>
+
+<h1>Live threat intel
+  <span class="subtitle">15 continuously-polled feeds, per-feed cadences, conditional fetches + composite multi-URL fetchers. Live-first convention is statically enforced.</span>
+</h1>
+
+<h2>What's wired up</h2>
+
+<table>
+<thead><tr><th>Feed</th><th>Source</th><th>Refresh</th><th>What it gives detectors</th></tr></thead>
+<tbody>
+<tr><td><code>cisa_kev</code></td><td>cisa.gov</td><td>24 h</td><td>Known Exploited Vulnerabilities catalog. Used by <code>supply_chain</code> to cross-check installed-software inventory.</td></tr>
+<tr><td><code>urlhaus_recent</code></td><td>abuse.ch</td><td>15 min</td><td>Recently observed malware URLs. Used by <code>c2</code> + <code>browser</code> cross-reference.</td></tr>
+<tr><td><code>malwarebazaar_recent</code></td><td>abuse.ch</td><td>15 min</td><td>Recent malware-sample hashes (SHA-256, MD5). Used by <code>c2</code> to flag running exes by hash.</td></tr>
+<tr><td><code>threatfox_recent</code></td><td>abuse.ch</td><td>15 min</td><td>Fresh IOCs (IPs, domains, URLs, hashes). Used by <code>c2</code> + <code>browser</code> cross-reference.</td></tr>
+<tr><td><code>tor_exit_list</code></td><td>torproject.org</td><td>1 h</td><td>Tor bulk exit-node list.</td></tr>
+<tr><td><code>spamhaus_drop</code></td><td>spamhaus.org</td><td>12 h</td><td>Hijacked IP space (DROP list).</td></tr>
+<tr><td><code>spamhaus_edrop</code></td><td>spamhaus.org</td><td>12 h</td><td>Extended DROP (sub-allocations).</td></tr>
+<tr><td><code>emerging_threats_compromised</code></td><td>emergingthreats.net</td><td>6 h</td><td>Compromised-IPs blocklist.</td></tr>
+<tr><td><code>openssf_malicious_packages</code></td><td>OpenSSF</td><td>12 h</td><td>OSV-formatted malicious-package dataset (npm, PyPI, …). <em>Authoritative</em> for <code>supply_chain</code>; bundled file is fallback only.</td></tr>
+<tr><td><code>shai_hulud_packages</code></td><td>Aikido (community-maintained)</td><td>1 h</td><td>Shai-Hulud worm IOCs: compromised packages + worm marker tiers + exfil URL patterns + worm workflow filename. <em>Authoritative</em> per-tier; bundled file is fallback per tier.</td></tr>
+<tr><td><code>github_advisory_npm</code></td><td>api.github.com</td><td>3 h</td><td>GitHub Advisory DB, npm ecosystem.</td></tr>
+<tr><td><code>github_advisory_pip</code></td><td>api.github.com</td><td>3 h</td><td>GitHub Advisory DB, PyPI ecosystem.</td></tr>
+<tr><td><code>nvd_service_cves</code> <span class="pill">composite</span></td><td>NVD API 2.0 (~30 CPEs)</td><td>24 h</td><td>CPE-keyed CVE corpus paginated across the curated service-product list. Used by <code>service_cve</code>. Honors <code>$NVD_API_KEY</code> for the 50 req/30s rate tier.</td></tr>
+<tr><td><code>sigmahq_corpus</code> <span class="pill">composite</span></td><td>SigmaHQ master tarball</td><td>24 h</td><td>Community detection rules filtered to 8 attack categories. <code>SigmaLoader</code> auto-extends its search path with the live cache; existing Sigma detector picks them up without changes.</td></tr>
+<tr><td><code>mitre_attack_groups</code> <span class="pill">composite</span></td><td>MITRE ATT&amp;CK Enterprise STIX 2.1</td><td>7 d</td><td>Threat-actor groups + associated software + techniques normalized into the actors-list shape <code>threat_actor</code> consumes. <em>Authoritative</em> for <code>threat_actor</code>; bundled file is supplemental.</td></tr>
+</tbody>
+</table>
+
+<h2>Live-first convention</h2>
+
+<p>Detectors that load bundled rule data MUST also call
+<code>load_intel(...)</code> for the live equivalent first; the live
+feed is authoritative when present, bundled is fallback only. This is
+statically enforced by <code>tests/test_data_freshness.py</code> — an AST
+guardrail that walks every detector file and asserts the call order.</p>
+
+<p>The escape hatch for digger-native data with no upstream counterpart
+(e.g., the unpatched-Chromium-bug corpus) is a per-file comment:</p>
+
+<pre><code># live-first-ok: &lt;reason explaining why no live feed exists&gt;</code></pre>
+
+<h2>Composite feeds (multi-URL fetchers)</h2>
+
+<p><code>Feed.fetch_fn</code> overrides the single-URL GET path for sources
+that need pagination, GitHub-API tree walks, or tarball extraction.
+Currently used by NVD (paginates per CPE), SigmaHQ (downloads master
+tarball + extracts subset), and MITRE ATT&amp;CK (downloads + parses
+STIX 2.1 bundle).</p>
+
+<p>Implementations live under <code>digger/intel/sources/</code> and each
+calls <code>digger.opsec.airgap.assert_network_allowed</code> first so
+air-gap mode refuses cleanly.</p>
+
+<p>Source: <code>digger/intel/feeds.py</code>. Each feed declares a URL, cadence,
+and parser function. Adding a feed = adding an entry to the <code>FEEDS</code>
+list (see <a href="extending.html">Extending</a>).</p>
+
+<h2>How fetches work</h2>
+
+<p>Every feed has a <code>.meta.json</code> sidecar in the cache directory
+storing the last <code>ETag</code> and <code>Last-Modified</code> header.
+Subsequent fetches send <code>If-None-Match</code> / <code>If-Modified-Since</code>
+and the server returns <code>304</code> when unchanged — cheap and polite.</p>
+
+<p>The cache directory defaults to <code>~/.cache/digger/intel/</code> but
+can be overridden with the <code>DIGGER_INTEL_DIR</code> environment variable.</p>
+
+<pre><code>$ ls ~/.cache/digger/intel/
+cisa_kev.json          cisa_kev.meta.json          cisa_kev.raw
+urlhaus_recent.json    urlhaus_recent.meta.json    urlhaus_recent.raw
+threatfox_recent.json  threatfox_recent.meta.json  threatfox_recent.raw
+...</code></pre>
+
+<dl class="kv">
+  <dt>.json</dt><dd>Parsed, normalized form that detectors load.</dd>
+  <dt>.raw</dt><dd>Untouched response body, for re-parsing or forensic record.</dd>
+  <dt>.meta.json</dt><dd>ETag, Last-Modified, fetched-at timestamp, size.</dd>
+</dl>
+
+<h2>Three ways to keep the cache fresh</h2>
+
+<h3>On-demand</h3>
+<pre><code>digger intel update            # refresh everything whose interval has elapsed
+digger intel update --force    # bypass intervals
+digger intel update --only cisa_kev,threatfox_recent</code></pre>
+
+<h3>Daemon mode (foreground)</h3>
+<pre><code>digger intel watch</code></pre>
+<p>Runs the <code>IntelScheduler</code> in the foreground — one thread polling
+each feed on its cadence. Ctrl-C exits cleanly.</p>
+
+<h3>Cron / systemd-timer</h3>
+
+<p>For longer-running deployments, schedule <code>digger intel update</code>
+externally:</p>
+
+<pre><code># crontab
+*/30 * * * *  /usr/local/bin/digger intel update --no-banner
+
+# systemd timer
+[Timer]
+OnBootSec=2m
+OnUnitActiveSec=30m</code></pre>
+
+<h2>Status</h2>
+
+<pre><code>$ digger intel status
+  [fresh]  cisa_kev                       fetched         53s ago  size=1473939
+  [fresh]  threatfox_recent               fetched         48s ago  size=8200
+  [STALE]  malwarebazaar_recent           fetched       3601s ago  size=92114
+  [STALE]  github_advisory_pip            fetched          never   size=?</code></pre>
+
+<p>A feed is <em>stale</em> when its age exceeds the configured interval, or
+when it has never been fetched. Detectors transparently fall back to
+bundled YAML snapshots under <code>digger/rules/</code> when a feed's cache
+is empty.</p>
+
+<h2>API keys</h2>
+
+<p>Most feeds don't require auth. The GitHub Advisory endpoints accept an
+optional <code>GITHUB_TOKEN</code> environment variable to lift rate limits.</p>
+
+<pre><code>export GITHUB_TOKEN=ghp_…
+digger intel update --only github_advisory_npm,github_advisory_pip</code></pre>
+
+<h2>Detectors that consume live intel</h2>
+
+<table>
+<thead><tr><th>Detector</th><th>Feeds</th></tr></thead>
+<tbody>
+<tr><td><code>supply_chain</code></td><td>openssf_malicious_packages, cisa_kev</td></tr>
+<tr><td><code>shai_hulud</code></td><td>shai_hulud_packages</td></tr>
+<tr><td><code>c2</code></td><td>threatfox_recent, urlhaus_recent, malwarebazaar_recent</td></tr>
+</tbody>
+</table>
+
+<p>Loading happens lazily — each detector calls
+<code>load_intel(feed_name)</code> at <code>detect()</code> time, so updates
+between scans are picked up automatically without restarting digger.</p>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>
