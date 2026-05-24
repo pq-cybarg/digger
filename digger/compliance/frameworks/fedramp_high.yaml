@@ -1,0 +1,61 @@
+id: FedRAMP_High
+title: FedRAMP High Baseline (NIST 800-53 Rev 5 tailoring for High-impact systems)
+version: "Rev 5"
+publisher: GSA / FedRAMP PMO
+url: https://www.fedramp.gov/baselines/
+description: |
+  FedRAMP tailors NIST 800-53 for cloud services at Low, Moderate,
+  and High impact levels. This catalog highlights additions and
+  enhancements over the Moderate baseline most relevant to endpoints
+  inside FedRAMP-authorized environments.
+
+controls:
+  - id: AU-2(3)
+    title: Audit Events — Reviews and Updates
+    family: AU
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: AU-6(1)
+    title: Audit Review — Process Integration
+    family: AU
+    severity_if_failed: medium
+    checks:
+      - artifact_present: processes
+  - id: AU-12(1)
+    title: Audit Generation — System-Wide / Time-Correlated Audit Trail
+    family: AU
+    severity_if_failed: high
+    checks:
+      - artifact_present: windows.event_logs
+      - artifact_present: linux.audit
+      - artifact_present: macos.unified_logs
+  - id: SI-4(2)
+    title: System Monitoring — Automated Tools and Mechanisms
+    family: SI
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - artifact_present: network
+  - id: SI-4(4)
+    title: System Monitoring — Inbound and Outbound Communications Traffic
+    family: SI
+    severity_if_failed: high
+    checks:
+      - artifact_present: network
+  - id: SC-7(8)
+    title: Boundary Protection — Route Internal Communications Traffic to External Networks
+    family: SC
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: SC-12
+    title: Cryptographic Key Establishment and Management
+    family: SC
+    severity_if_failed: high
+    checks: [{manual: true}]
+    references: ["FIPS 140-3", "FedRAMP High Baseline"]
+  - id: IR-4(1)
+    title: Incident Handling — Automated Incident Handling Processes
+    family: IR
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes

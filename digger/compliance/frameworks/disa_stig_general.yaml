@@ -1,0 +1,56 @@
+id: DISA_STIG_General_OS
+title: DISA STIG — General Operating System Requirements (cross-platform subset)
+version: "current"
+publisher: U.S. Defense Information Systems Agency (DISA)
+url: https://public.cyber.mil/stigs/
+description: |
+  STIG controls that apply across macOS/Linux/Windows operating systems
+  in the DoD context. Full STIGs are per-OS; this is a cross-platform
+  subset of high-impact common requirements (SRG-OS-XXXXXX).
+
+controls:
+  - id: SRG-OS-000001
+    title: The information system must monitor and control communications at the external boundary of the system
+    family: Boundary Protection
+    severity_if_failed: high
+    checks:
+      - artifact_present: network
+  - id: SRG-OS-000033
+    title: The operating system must implement cryptographic mechanisms to prevent unauthorized disclosure of CUI
+    family: Cryptography
+    severity_if_failed: high
+    checks: [{manual: true}]
+    references: ["FIPS 140-3"]
+  - id: SRG-OS-000037
+    title: The operating system must generate audit records for the events identified by all defined event types
+    family: Audit and Accountability
+    severity_if_failed: high
+    checks:
+      - artifact_present: windows.event_logs
+      - artifact_present: linux.audit
+      - artifact_present: macos.unified_logs
+  - id: SRG-OS-000038
+    title: The operating system must initiate session audits at system startup
+    family: Audit
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: SRG-OS-000076
+    title: The operating system must employ replay-resistant authentication mechanisms
+    family: Identification and Authentication
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: SRG-OS-000080
+    title: The operating system must enforce a minimum 15-character password length
+    family: Identification and Authentication
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: SRG-OS-000363
+    title: The operating system must, for networked systems, synchronize internal information system clocks to authoritative time source
+    family: Audit
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: SRG-OS-000437
+    title: The operating system must remove all software components after updates have been installed
+    family: Maintenance
+    severity_if_failed: low
+    checks: [{manual: true}]

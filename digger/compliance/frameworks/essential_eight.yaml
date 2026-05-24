@@ -1,0 +1,58 @@
+id: ACSC_Essential_Eight
+title: Australian Cyber Security Centre — Essential Eight
+version: "November 2023"
+publisher: ACSC / Australian Signals Directorate
+url: https://www.cyber.gov.au/essential-eight
+description: |
+  Eight mitigation strategies baseline for ACSC's Essential Eight Maturity Model.
+  Each ML (1, 2, 3) tightens the implementation. digger checks are partial
+  — full coverage requires policy and configuration audits beyond endpoint
+  observation.
+
+controls:
+  - id: E8-1-Application-Control
+    title: Application control (whitelisting)
+    family: Application Control
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: persistence_outlier
+  - id: E8-2-Patch-Applications
+    title: Patch applications
+    family: Patch
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: supply_chain
+  - id: E8-3-Configure-Macros
+    title: Configure Microsoft Office macro settings
+    family: Office macros
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: E8-4-User-Application-Hardening
+    title: User application hardening (Java/Flash/web ads, etc.)
+    family: Hardening
+    severity_if_failed: medium
+    checks:
+      - no_finding_with_detector: browser
+  - id: E8-5-Restrict-Admin-Privileges
+    title: Restrict administrative privileges
+    family: Privileges
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: env_hijack
+      - no_finding_with_detector: ssh_auth_keys
+  - id: E8-6-Patch-Operating-Systems
+    title: Patch operating systems
+    family: Patch
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: supply_chain
+  - id: E8-7-Multi-Factor-Authentication
+    title: Multi-factor authentication
+    family: MFA
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: E8-8-Regular-Backups
+    title: Regular backups
+    family: Backups
+    severity_if_failed: medium
+    checks: [{manual: true}]

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Forensics-grade evidence handling — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="forensics-grade">
+<main>
+
+<h1>Forensics-grade evidence handling
+  <span class="subtitle">ISO/IEC 27037 + NIST SP 800-86 chain of custody, hash-chained evidence DB, PQC signatures, classification + TLP markings.</span>
+</h1>
+
+<h2>The four pillars</h2>
+
+<div class="cards">
+  <div class="card">
+    <h3>Integrity</h3>
+    <p>SHA-256 hash chain across the evidence DB. Append-only rows. Any modification cascades a chain-hash mismatch detectable by <code>digger verify</code>.</p>
+  </div>
+  <div class="card">
+    <h3>Authenticity</h3>
+    <p>Optional PQC signature over the chain tip with a NIST FIPS-finalized algorithm (default <code>ML-DSA-65</code>). Binds the case state to a specific custodian.</p>
+  </div>
+  <div class="card">
+    <h3>Chain of custody</h3>
+    <p>ISO/IEC 27037 + NIST SP 800-86 sidecar JSON. Records who/what/when/where/why/how for every action.</p>
+  </div>
+  <div class="card">
+    <h3>Handling markings</h3>
+    <p>Classification (UNCLASSIFIED / CUI / etc.) and TLP markings stored in case metadata, propagated to exports, and respected by sharing filters.</p>
+  </div>
+</div>
+
+<h2>ISO/IEC 27037:2012</h2>
+
+<p>The ISO standard for the identification, collection, acquisition, and
+preservation of digital evidence. §6 mandates that the following be
+recorded for evidence to be admissible:</p>
+
+<ul>
+<li><strong>Who</strong> acquired/handled it — named individual, role, contact</li>
+<li><strong>What</strong> was acquired — device identifier, source path, size, hash</li>
+<li><strong>When</strong> — UTC timestamp, time zone, time source</li>
+<li><strong>Where</strong> — physical and logical location</li>
+<li><strong>Why</strong> — legal authority, investigative scope</li>
+<li><strong>How</strong> — tools, versions, methodology</li>
+</ul>
+
+<p>NIST SP 800-86 adds the collection / examination / analysis / reporting
+lifecycle with documented integrity verification at each stage.</p>
+
+<h2>The chain-of-custody record</h2>
+
+<p>Source: <code>digger/coc/record.py</code>.</p>
+
+<p>Created automatically when a case is opened. Lives at
+<code>&lt;case-dir&gt;/chain_of_custody.json</code>. Sample:</p>
+
+<pre><code>{
+  "case_id": "d3a3be40-841c-43c7-9549-e31e7f464626",
+  "custodian_name": "analyst",
+  "custodian_role": "Analyst",
+  "custodian_contact": "",
+  "legal_authority": "host owner consent",
+  "investigative_scope": "endpoint forensic triage",
+  "target_host": "lockedin.local",
+  "target_os": "macOS-15.1-arm64-arm-64bit-Mach-O",
+  "time_zone": "PDT",
+  "time_source": "local OS clock",
+  "classification": "UNCLASSIFIED",
+  "handling_caveats": [],
+  "tlp": "TLP:AMBER",
+  "iso_27037_compliance": true,
+  "nist_800_86_compliance": true,
+  "events": [
+    {
+      "event_type": "case_opened",
+      "timestamp_utc": 1747780123.4,
+      "iso_8601": "2026-05-20T22:08:43Z",
+      "actor_name": "analyst",
+      "actor_user": "analyst",
+      "actor_host": "lockedin.local",
+      "location": "Darwin 25.1.0",
+      "methodology": "automated digger workflow",
+      "notes": "case directory initialized",
+      "tool": "digger",
+      "tool_version": "0.1.0"
+    },
+    { "event_type": "collection_started", ... },
+    { "event_type": "collection_finished", ... }
+  ]
+}</code></pre>
+
+<h2>Recorded events</h2>
+
+<p>Lifecycle hooks append events automatically:</p>
+
+<table>
+<thead><tr><th>Event</th><th>Triggered by</th></tr></thead>
+<tbody>
+<tr><td><code>case_opened</code></td><td>First write to the case directory</td></tr>
+<tr><td><code>collection_started</code> / <code>collection_finished</code></td><td>Each <code>digger collect</code> run</td></tr>
+<tr><td><code>scan_started</code> / <code>scan_finished</code></td><td>Each <code>digger scan</code> run</td></tr>
+<tr><td><code>triage_started</code> / <code>triage_finished</code></td><td>Each <code>digger triage</code> run</td></tr>
+<tr><td><code>report_generated</code></td><td>Each report rendering</td></tr>
+<tr><td><code>case_signed</code> / <code>case_verified</code></td><td>PQC sign / verify</td></tr>
+<tr><td><code>case_exported</code> / <code>case_imported</code></td><td>STIX/MISP/TAXII export</td></tr>
+<tr><td><code>case_encrypted</code> / <code>case_decrypted</code></td><td>Hybrid PQC encryption</td></tr>
+<tr><td><code>evidence_transferred</code></td><td>Manual: when the case directory changes hands</td></tr>
+<tr><td><code>case_closed</code></td><td>End of investigation</td></tr>
+<tr><td><code>manual_note</code></td><td>Free-form analyst annotation</td></tr>
+</tbody>
+</table>
+
+<p>You can append manual events programmatically:</p>
+
+<pre><code>from digger.coc import open_custody
+from digger.coc.record import append_event
+
+coc = open_custody("./case-1", case_id="...")
+append_event("./case-1", coc, "manual_note", "Reviewed by D. Smith, no concerns.")</code></pre>
+
+<h2>Tamper detection</h2>
+
+<p>Three independent checks layer on top of each other:</p>
+
+<ol>
+<li><strong>Chain verification</strong> — <code>digger verify</code> walks the
+  whole DB. Mismatch cascades from the tampered row forward.</li>
+<li><strong>PQC signature</strong> — <code>digger pqc verify</code> over the
+  chain tip. A modified chain tip won't verify against an earlier signature.</li>
+<li><strong>CoC event log</strong> — every digger operation appends an event.
+  Gaps and timing mismatches in the event log are themselves evidence of
+  tampering.</li>
+</ol>
+
+<h2>Classification + handling caveats</h2>
+
+<p>Set per case at collection time:</p>
+
+<pre><code>digger --classification CUI \
+       --tlp TLP:AMBER+STRICT \
+       investigate --case-dir ./case-1</code></pre>
+
+<p>Stored in the CoC record and in case metadata. Picked up by every
+exporter (STIX, MISP, ATT&amp;CK Navigator) so externally-shared bundles
+carry the correct marking. Findings can override per-finding TLP through
+the triage step.</p>
+
+<h2>Compliance mapping</h2>
+
+<p>The bundled <code>iso_27037</code> framework catalog evaluates digger's
+own evidence handling against the standard. Run:</p>
+
+<pre><code>digger compliance assess --case-dir ./case-1 --frameworks iso_27037</code></pre>
+
+<p>It evaluates the controls that are mechanically checkable (presence of
+artifacts, count, time records) and flags the rest as <code>manual</code>
+for analyst sign-off (acquisition methodology, justifiability, repeatability).</p>
+
+<h2>Operational guidance</h2>
+
+<ul>
+<li>Sign the chain tip <em>immediately</em> after collection, before any
+  analyst inspection, with a stored secret key not on the same host:
+  <code>digger pqc sign --case-dir … --algorithm ML-DSA-65 --key /secure/keys/case-N.sk</code></li>
+<li>Keep the case directory read-only between operations:
+  <code>chmod -R a-w ./case-1</code> and re-enable for the next run.</li>
+<li>For transfers, archive the case directory plus
+  <code>case_signature.json</code> plus <code>chain_of_custody.json</code>
+  together. Re-run <code>digger verify</code> and <code>digger pqc verify</code>
+  at the receiving end.</li>
+<li>For long-term archival, hybrid-encrypt the archive:
+  <code>digger pqc encrypt</code> (forthcoming CLI wrapper) or call
+  <code>digger.crypto.hybrid_encrypt</code> with the recipient's ML-KEM-768 public key.</li>
+</ul>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

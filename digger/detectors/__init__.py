@@ -1,0 +1,66 @@
+"""Detector registry."""
+
+from __future__ import annotations
+
+from digger.detectors.base import Detector
+
+
+def all_detectors() -> list[Detector]:
+    from digger.detectors.suspicious_processes import SuspiciousProcessDetector
+    from digger.detectors.network_anomaly import NetworkAnomalyDetector
+    from digger.detectors.persistence import PersistenceDetector
+    from digger.detectors.lolbins import LolbinDetector
+    from digger.detectors.ioc import IocDetector
+    from digger.detectors.yara_scan import YaraDetector
+    from digger.detectors.browser import BrowserDetector
+    from digger.detectors.env_hijack import EnvHijackDetector
+    from digger.detectors.ssh_auth_keys import SshAuthKeysDetector
+    from digger.detectors.shai_hulud import ShaiHuludDetector
+    from digger.detectors.supply_chain import SupplyChainDetector
+    from digger.detectors.c2 import C2Detector
+    from digger.detectors.threat_actor import ThreatActorDetector
+    from digger.detectors.service_cve import ServiceCVEDetector
+    from digger.detectors.firewall_audit import FirewallAuditDetector
+    from digger.detectors.recon import ReconDetector
+    from digger.detectors.exploitation import ExploitationDetector
+    from digger.detectors.privesc import PrivescDetector
+    from digger.detectors.lateral import LateralMovementDetector
+    from digger.detectors.ad_attacks import ADAttackDetector
+    from digger.detectors.cloud_attacks import CloudAttackDetector
+    from digger.detectors.counter_re import CounterREDetector
+    from digger.detectors.persistent_sessions import PersistentSessionDetector
+    from digger.detectors.attacker_tooling import AttackerToolingDetector
+    from digger.detectors.timeline import TimelineBuilder
+    from digger.loki.detector import LokiStyleDetector
+    from digger.memory.detector import MemoryAnomalyDetector
+    from digger.signing.detector import UnsignedBinaryDetector
+    return [
+        SuspiciousProcessDetector(),
+        NetworkAnomalyDetector(),
+        PersistenceDetector(),
+        LolbinDetector(),
+        IocDetector(),
+        YaraDetector(),
+        BrowserDetector(),
+        EnvHijackDetector(),
+        SshAuthKeysDetector(),
+        ShaiHuludDetector(),
+        SupplyChainDetector(),
+        C2Detector(),
+        ThreatActorDetector(),
+        ServiceCVEDetector(),
+        FirewallAuditDetector(),
+        ReconDetector(),
+        ExploitationDetector(),
+        PrivescDetector(),
+        LateralMovementDetector(),
+        ADAttackDetector(),
+        CloudAttackDetector(),
+        CounterREDetector(),
+        PersistentSessionDetector(),
+        AttackerToolingDetector(),
+        LokiStyleDetector(),
+        MemoryAnomalyDetector(),
+        UnsignedBinaryDetector(),
+        TimelineBuilder(),  # last — produces a synthetic timeline
+    ]

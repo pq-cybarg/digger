@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>STIX / MISP / ATT&amp;CK Navigator — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="exchange">
+<main>
+
+<h1>Intel exchange formats
+  <span class="subtitle">STIX 2.1 bundles, MISP events, ATT&amp;CK Navigator layers, TAXII 2.1 pushes — TLP-aware.</span>
+</h1>
+
+<h2>Why hand-rolled?</h2>
+
+<p>digger's exchange exporters are pure-Python, zero-dependency (other than
+<code>requests</code> for TAXII push). The exports are not large enough to
+justify pulling in <code>stix2</code> or <code>pymisp</code>, and the
+hand-rolled paths let us guarantee that TLP markings, MITRE ATT&amp;CK
+references, and digger-specific metadata are always preserved without
+fighting an upstream schema.</p>
+
+<p>Source: <code>digger/exchange/</code>.</p>
+
+<h2>STIX 2.1 bundle</h2>
+
+<pre><code>digger export stix --case-dir ./case-1 --tlp TLP:AMBER --out ./case.stix.json</code></pre>
+
+<p>Produces a JSON bundle containing:</p>
+
+<table>
+<thead><tr><th>STIX type</th><th>Role</th></tr></thead>
+<tbody>
+<tr><td><code>identity</code></td><td>One identity SDO for digger itself</td></tr>
+<tr><td><code>marking-definition</code></td><td>TLP marking referenced by every object</td></tr>
+<tr><td><code>incident</code></td><td>One incident SDO summarizing the case</td></tr>
+<tr><td><code>indicator</code></td><td>One per IOC extracted from medium+ findings — pattern in STIX 2.1 dialect</td></tr>
+<tr><td><code>attack-pattern</code></td><td>One per MITRE ATT&amp;CK technique referenced</td></tr>
+<tr><td><code>relationship</code></td><td>indicator <em>indicates</em> incident; incident <em>uses</em> attack-pattern</td></tr>
+</tbody>
+</table>
+
+<p>Compatible with OpenCTI, MISP (via stix2misp), Anomali, and any TAXII 2.1
+receiver. IOC kinds mapped to STIX patterns:</p>
+
+<dl class="kv">
+  <dt>sha256</dt><dd><code>[file:hashes.'SHA-256' = '…']</code></dd>
+  <dt>md5</dt><dd><code>[file:hashes.'MD5' = '…']</code></dd>
+  <dt>ipv4</dt><dd><code>[ipv4-addr:value = '…']</code></dd>
+  <dt>domain</dt><dd><code>[domain-name:value = '…']</code></dd>
+  <dt>url</dt><dd><code>[url:value = '…']</code></dd>
+  <dt>path</dt><dd><code>[file:name MATCHES '…']</code></dd>
+</dl>
+
+<h2>MISP event</h2>
+
+<pre><code>digger export misp --case-dir ./case-1 --tlp TLP:AMBER --out ./case.misp.json</code></pre>
+
+<p>One MISP event with attributes derived from IOCs and tags including the
+TLP marking and a MITRE ATT&amp;CK galaxy tag per technique. Import via
+the MISP web UI's <em>Events &gt; List Events &gt; Add Event from JSON</em>
+or programmatically with PyMISP.</p>
+
+<dl class="kv">
+  <dt>distribution</dt><dd>Defaults to <code>0</code> (your org only). Override before import via MISP.</dd>
+  <dt>threat_level_id</dt><dd>1 = high, 2 = medium (default), 3 = low, 4 = undefined.</dd>
+  <dt>analysis</dt><dd>0 initial, 1 ongoing (default), 2 complete.</dd>
+</dl>
+
+<h2>MITRE ATT&amp;CK Navigator layer</h2>
+
+<pre><code>digger export attack-navigator --case-dir ./case-1 --out ./case.attack-navigator.json</code></pre>
+
+<p>Drop the resulting JSON into the
+<a href="https://mitre-attack.github.io/attack-navigator/">ATT&amp;CK
+Navigator</a> via <em>Open Existing Layer → Upload from Local</em>. You
+get a tinted matrix showing every technique digger observed on this host,
+colored by severity (info → critical) on a green→yellow→red gradient.</p>
+
+<h2>TAXII 2.1 push</h2>
+
+<pre><code>digger export taxii --case-dir ./case-1 \
+       --base-url https://taxii.example.com \
+       --api-root api1 \
+       --collection 91a7e2-…-bundle \
+       --token "$DIGGER_TAXII_TOKEN" \
+       --tlp TLP:AMBER</code></pre>
+
+<p>Pushes the STIX 2.1 bundle to the named collection. Auth is HTTP Basic
+(<code>--username</code> + <code>--password</code>) or Bearer
+(<code>--token</code>). Server URL components follow the TAXII 2.1 spec
+exactly (<code>discovery</code> → <code>api-roots</code> →
+<code>collections</code> → <code>objects/</code>).</p>
+
+<h2>TLP sharing filter</h2>
+
+<p>Each finding carries its own TLP (defaulting to the case-wide marking).
+Exporters propagate that marking into every produced object. Use a sharing
+TLP one or more steps stricter to filter:</p>
+
+<pre><code>digger export stix --case-dir ./case-1 --tlp TLP:GREEN
+# only findings marked CLEAR or GREEN are included
+# everything else is filtered out per FIRST.org TLP 2.0 semantics</code></pre>
+
+<h2>Sigma rule loader</h2>
+
+<p>Sigma is a separate flow — input, not output — but it lives in
+<code>digger/exchange/sigma.py</code>. See <a href="sigma.html">Sigma rules</a>.</p>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

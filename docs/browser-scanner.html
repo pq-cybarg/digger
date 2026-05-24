@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Browser scanner — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="browser-scanner">
+<main>
+
+<h1>Browser scanner
+  <span class="subtitle">First-class browser-forensics surface for Chromium-based browsers and Firefox.</span>
+</h1>
+
+<p>digger's browser scanner pulls eight artifact families from every
+Chromium-based profile (Chrome / Edge / Brave / Arc / Vivaldi / Opera)
+and cross-references every origin against live URLhaus + ThreatFox feeds.
+Firefox history + extensions are covered too.</p>
+
+<h2>What's captured</h2>
+
+<table>
+  <thead><tr><th>Artifact</th><th>Source</th><th>Privacy</th></tr></thead>
+  <tbody>
+    <tr><td><code>chrome.history</code></td><td>History SQLite</td><td>URLs + titles</td></tr>
+    <tr><td><code>chrome.downloads</code></td><td>History SQLite</td><td>target_path + source_url</td></tr>
+    <tr><td><code>chrome.extensions</code></td><td>Extensions/ + manifest.json</td><td>id / name / version / permissions / update_url</td></tr>
+    <tr><td><code>chrome.cookies</code></td><td>Cookies SQLite</td><td>per-domain <em>counts + value bytes only</em>, never values</td></tr>
+    <tr><td><code>chrome.passwords_summary</code></td><td>Login Data SQLite</td><td>saved <em>count + distinct realm count only</em></td></tr>
+    <tr><td><code>chrome.indexeddb</code></td><td>IndexedDB/ subdirs</td><td>origin (reverse-mangled from filesystem name) + bytes</td></tr>
+    <tr><td><code>chrome.local_storage</code></td><td>Local Storage/leveldb/ via <code>strings</code></td><td>origin strings + total bytes</td></tr>
+    <tr><td><code>chrome.pwas</code></td><td>Web Applications/ + manifest.json</td><td>id / name / start_url / scope</td></tr>
+    <tr><td><code>chrome.profile_defaults</code></td><td>Preferences JSON</td><td>default search engine, homepage, startup URLs, Safe Browsing on/off</td></tr>
+    <tr><td><code>chrome.service_workers</code></td><td>Service Worker/Database/ via <code>strings</code></td><td>origins, script count, total storage bytes</td></tr>
+  </tbody>
+</table>
+
+<h2>Detector branches</h2>
+
+<p>The <code>BrowserDetector</code> runs eight independent checks. Every
+origin that appears in any artifact gets cross-referenced against the
+URLhaus / ThreatFox live feeds for a known-bad-host hit.</p>
+
+<ul class="kv">
+  <li><b>Extensions</b> — risky permissions (<code>&lt;all_urls&gt;</code>,
+    <code>tabs</code>, <code>webRequestBlocking</code>, <code>nativeMessaging</code>,
+    <code>debugger</code>, etc.) → medium (T1176)</li>
+  <li><b>Cookies</b> — &gt;500 cookie domains → low (T1539); cookies
+    for known-bad host → high</li>
+  <li><b>Saved passwords</b> — &gt;200 saved → info advisory (T1555.003)</li>
+  <li><b>IndexedDB</b> — &gt;200 MB single-origin → low; bad-origin
+    match → critical (T1185)</li>
+  <li><b>Local Storage</b> — bad-origin match → critical (T1185)</li>
+  <li><b>PWAs</b> — inventory (info); bad start_url → critical</li>
+  <li><b>Profile defaults</b> — non-mainstream search engine → medium
+    (search-hijack suspicion); startup URL is bad-host → critical (T1176)</li>
+  <li><b>Service workers</b> — baseline info finding per profile
+    (friendly vs unfamiliar origin split); ≥5 unfamiliar → medium;
+    &gt;500 MB SW storage → medium, &gt;2 GB → high; ≥60 origins → low;
+    bad-origin → critical. See also
+    <a href="chromium-unpatched.html">unpatched Chromium bugs</a>
+    for the crbug-40062121 service-worker persistence story.</li>
+</ul>
+
+<h2>Cookie / password counts only — never values</h2>
+
+<p>The browser collector deliberately reads only aggregate counts from
+the password and cookie databases. The Login Data SQLite is queried
+with <code>SELECT COUNT(*), COUNT(DISTINCT signon_realm) FROM logins</code>;
+the cookie store with <code>SELECT host_key, COUNT(*), SUM(LENGTH(value))
+... GROUP BY host_key</code>. The values themselves never enter the evidence
+store, never appear in a finding, never get logged. This is an
+intentional ethics-contract design: passwords + cookies are
+<em>uniquely</em> high-impact loss surfaces, and a counts-only
+inventory delivers ~90% of the investigative value (is there a
+saved-credential store at all? for how many sites?) with zero exposure.</p>
+
+<h2>Origin reverse-mangling</h2>
+
+<p>Chrome stores IndexedDB databases in directories like
+<code>https_example.com_0.indexeddb.leveldb</code>. The collector
+reverses the underscore mangling to produce a URL-shaped origin
+(<code>https://example.com</code>) that detectors can pattern-match
+against URLhaus / ThreatFox entries without further parsing.</p>
+
+<h2>Live-feed cross-reference</h2>
+
+<p>On every scan, the detector pulls the latest URLhaus + ThreatFox
+entries from the intel cache and builds a single bad-host set. Every
+origin from every browser artifact gets a <code>_matches_bad_origin</code>
+check — exact host match OR subdomain rollup (e.g., a finding for
+<code>foo.evil.com</code> in browser data with <code>evil.com</code> in the
+feed both fire). When a match lands, the finding carries the source
+feed identifier so the reviewer can pivot back to the feed entry.</p>
+
+<h2>See also</h2>
+
+<ul>
+  <li><a href="chromium-unpatched.html">Unpatched Chromium bugs corpus</a> — the
+    crbug-40062121 service-worker persistence canary and its corpus
+    schema.</li>
+  <li><a href="intel.html">Live feeds</a> — URLhaus, ThreatFox,
+    MalwareBazaar, OpenSSF, SigmaHQ, MITRE ATT&amp;CK, Aikido Shai-Hulud.</li>
+  <li><a href="ethics.html">Ethical contract</a> — P10 audit-visibility
+    is why we report findings on digger itself rather than silently
+    filtering, and P2 observation-default is why password values never
+    enter the evidence store.</li>
+</ul>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>

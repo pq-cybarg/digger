@@ -1,0 +1,59 @@
+id: PCI_DSS_4_0
+title: PCI DSS 4.0.1 — Payment Card Industry Data Security Standard
+version: "4.0.1"
+publisher: PCI Security Standards Council
+url: https://www.pcisecuritystandards.org/
+description: |
+  Requirements that apply to all entities involved in payment card
+  processing. Focused on endpoint-evaluable controls.
+
+controls:
+  - id: "6.3.3"
+    title: Identify, classify, and address vulnerabilities promptly
+    family: "6 — Maintain a vulnerability management program"
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: supply_chain
+  - id: "8.2"
+    title: Strong user authentication and identification
+    family: "8 — Identify users and authenticate access"
+    severity_if_failed: high
+    checks:
+      - artifact_present: users
+  - id: "8.3.6"
+    title: Multi-factor authentication for all access to the CDE
+    family: "8"
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: "10.2"
+    title: Implement audit logs for all system components
+    family: "10 — Log and monitor all access"
+    severity_if_failed: high
+    checks:
+      - artifact_present: windows.event_logs
+      - artifact_present: linux.audit
+      - artifact_present: macos.unified_logs
+  - id: "10.4"
+    title: Time synchronization across system components
+    family: "10"
+    severity_if_failed: medium
+    checks:
+      - artifact_present: system
+  - id: "10.6"
+    title: Audit log entries are reviewed for indications of suspicious activity
+    family: "10"
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - no_finding_above: high
+  - id: "11.5.1"
+    title: Intrusion-detection and/or intrusion-prevention deployed
+    family: "11"
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: c2
+  - id: "12.10.4"
+    title: Incident response team trained and ready
+    family: "12"
+    severity_if_failed: medium
+    checks: [{manual: true}]

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Decepticon countermeasures — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="decepticon-counter">
+<main>
+
+<h1>Decepticon countermeasures
+  <span class="subtitle">A defensive detector for each Decepticon kill-chain phase.</span>
+</h1>
+
+<p><a href="https://github.com/PurpleAILAB/Decepticon">PurpleAILAB/Decepticon</a> is
+an autonomous red-team agent with 16 specialist agents that span the
+kill chain (reconnaissance → exploitation → privesc → lateral movement
+→ C2). digger's <strong>Counter-offensive</strong> detectors are the
+defender mirror: one detector per Decepticon phase, plus a cross-
+cutting auto-Sigma export so the rules ship to your SIEM.</p>
+
+<p>Every counter detector is observation-only — they read what other
+collectors have already captured. No active probing; no exploit
+verification (P3 of the <a href="ethics.html">ethical contract</a>).</p>
+
+<h2>Phase-by-phase</h2>
+
+<table>
+  <thead><tr>
+    <th>Decepticon phase</th>
+    <th>digger detector</th>
+    <th>MITRE</th>
+    <th>Key signals</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td>Reconnaissance</td>
+      <td><code>recon</code></td>
+      <td>T1595.001 / T1592.002 / T1110.001 / T1589.002</td>
+      <td>connection-table portscan footprint, SSH brute-force /
+        banner-grab / user-enumeration from auth logs</td>
+    </tr>
+    <tr>
+      <td>Exploitation</td>
+      <td><code>exploitation</code></td>
+      <td>T1190 / T1059 / T1203</td>
+      <td>listening service → shell, RCE-classic three-tier chain
+        (service → interpreter → shell), 11 shellcode-shape cmdline
+        patterns, web-server log exploit signatures (Log4Shell,
+        Spring4Shell, path-traversal, inline PHP, Shellshock, Laravel
+        Ignition, SQLi, reflected XSS)</td>
+    </tr>
+    <tr>
+      <td>Privilege escalation</td>
+      <td><code>privesc</code></td>
+      <td>T1548 / T1068 / T1547.006</td>
+      <td>world-writable setuid, setuid in scratch / home,
+        GTFOBins-trivial setuid (perl/python/awk/bash/cp/mv/vi/...),
+        sudoers <code>NOPASSWD: ALL</code>, Linux file capabilities on
+        shells, kernel taint bits decoded</td>
+    </tr>
+    <tr>
+      <td>Lateral movement</td>
+      <td><code>lateral</code></td>
+      <td>T1021 / T1550.002 / T1570</td>
+      <td>SMB/SSH/WinRM/RDP/VNC outbound to RFC1918 from non-admin
+        processes, credential dumpers (mimikatz / Rubeus / SafetyKatz /
+        secretsdump / LaZagne / Certipy), Impacket / evil-winrm /
+        CrackMapExec / Responder / mitm6 by name, SSH ProxyJump,
+        pass-the-hash markers in Windows 4624</td>
+    </tr>
+    <tr>
+      <td>C2 frameworks</td>
+      <td><code>c2</code> (extended)</td>
+      <td>T1071 / T1573 / T1095 / T1055</td>
+      <td>Cobalt Strike + Sliver + Mythic + Brute Ratel + Havoc + Empire
+        + Metasploit + Nighthawk + Merlin + Covenant; named-pipe
+        patterns (<code>MSSE-*</code>, <code>sliver_*</code>, <code>demon_*</code>),
+        TLS JA3 hashes, process-injection landing-pad heuristic
+        (svchost/dllhost/explorer with non-Microsoft outbound)</td>
+    </tr>
+    <tr>
+      <td>Active Directory</td>
+      <td><code>ad_attacks</code></td>
+      <td>T1558.003 / T1558.004 / T1003.006 / T1484.001</td>
+      <td>Kerberoasting (4769 RC4-HMAC for non-krbtgt SPN), AS-REP
+        roasting (4768 PreAuthType 0), BloodHound / SharpHound /
+        AzureHound family, DCSync via cmdline or 4662 with replication-
+        rights GUID, AdminSDHolder modification (5136), DCShadow /
+        golden+silver ticket markers</td>
+    </tr>
+    <tr>
+      <td>Cloud</td>
+      <td><code>cloud_attacks</code></td>
+      <td>T1552.005 / T1078.004 / T1611 / T1528 / T1098</td>
+      <td>IMDS endpoint (169.254.169.254) hit from non-cloud-agent
+        processes, cloud-cred env vars in shells, world-readable
+        <code>~/.aws/credentials</code>, container-escape primitives
+        (release_agent, /var/run/docker.sock, nsenter PID-1),
+        kubeconfig read by non-kube clients, cloud-CLI privesc
+        commands</td>
+    </tr>
+    <tr>
+      <td>RE-on-us (debugger attached)</td>
+      <td><code>counter_re</code></td>
+      <td>T1622 / T1057</td>
+      <td>debuggers (gdb / lldb / dtrace / x64dbg / IDA / Ghidra /
+        radare2 / frida / WindBg / cdb) with target-PID matching digger
+        itself or an EDR / audit process; self-attribution via
+        <code>digger.opsec.self_id</code></td>
+    </tr>
+    <tr>
+      <td>Persistent sessions</td>
+      <td><code>persistent_sessions</code></td>
+      <td>T1546 / T1543.002</td>
+      <td>tmux/screen/zellij/dtach parented by network-facing service
+        (sshd explicitly excluded — admin baseline), detached
+        nohup/setsid processes with INET sockets, user-systemd
+        ExecStart pointing to user-writable shell scripts</td>
+    </tr>
+    <tr>
+      <td>Attacker tooling present</td>
+      <td><code>attacker_tooling</code></td>
+      <td>T1588.002</td>
+      <td>60+ tools across c2_framework / lateral / ad_recon /
+        ad_cs_abuse / network_mitm / creds / cracker / recon /
+        web_pentest / tunnel categories. Detects RUNNING and INSTALLED
+        (brew / dpkg / rpm / snap / flatpak / Windows uninstall keys).
+        Self-attribution downgrades severity for dev-clone / venv
+        paths (<code>[dev-context]</code> tag in title).</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Auto-Sigma export</h2>
+
+<p>Every counter detector implements <code>to_sigma_template()</code>, a
+classmethod on <code>digger.detectors.base.Detector</code> that returns a
+generic, per-class Sigma rule (independent of any specific finding).</p>
+
+<pre><code>$ digger generate sigma --from-detectors --out-dir out/sigma/
+generated 9 per-detector Sigma templates
+out: out/sigma
+
+$ ls out/sigma/
+digger-ad-attacks-template_AD_attack_tradecraft_Kerberoast_AS-REP_DCSync_BloodHound.yml
+digger-attacker-tooling-template_Attacker_red-team_toolkit_running_on_host.yml
+digger-cloud-attacks-template_Cloud-attack_tradecraft_IMDS_theft_kubeconfig_read_container_escape.yml
+digger-counter-re-template_Debugger_RE_tool_attached_to_defender_process.yml
+digger-exploitation-template_Network_service_spawned_an_interactive_shell_post-RCE_pattern_.yml
+digger-lateral-template_Lateral_movement_outbound_SMB_SSH_WinRM_RDP_to_internal_IP.yml
+digger-persistent-sessions-template_Multiplexer_tmux_screen_zellij_parented_by_a_network_service.yml
+digger-privesc-template_Privilege-escalation_primitive_installed_setuid_capability_sudoers_kmod_.yml
+digger-recon-template_Inbound_recon_SSH_brute-force_or_port-scan_footprint.yml
+</code></pre>
+
+<p>Each rule carries proper ATT&CK tags and round-trips cleanly through
+<code>digger.exchange.sigma.SigmaLoader</code>. The
+<code>tests/test_genrule_detector_templates.py</code> suite enforces this
+on every release.</p>
+
+<h2>Ethics + counter-offensive</h2>
+
+<p>Every counter detector observes; nothing actively probes. The
+<a href="ethics.html">ethical contract</a> contrast table:</p>
+
+<table>
+  <thead><tr><th>Decepticon does</th><th>digger refuses</th></tr></thead>
+  <tbody>
+    <tr><td>Multi-host engagements with RoE/ConOps</td><td>Local-host-only by default; cross-host requires explicit flag</td></tr>
+    <tr><td>Active scanning of targets</td><td>Read-only observation of artifacts already collected</td></tr>
+    <tr><td>Verifies exploits to confirm vulnerability</td><td>Refuses to send any payload; only matches version ranges</td></tr>
+    <tr><td>Credential brute force / hashcat / rainbow tables</td><td>Refuses credential attacks; only detects defensive misconfiguration</td></tr>
+    <tr><td>Lateral movement via psexec/wmiexec/evil-winrm</td><td>Detects these tools; never invokes them</td></tr>
+    <tr><td>C2 implant deployment</td><td>Detects implants; never installs persistence</td></tr>
+  </tbody>
+</table>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>

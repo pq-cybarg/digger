@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Detectors — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="detectors">
+<main>
+
+<h1>Detectors
+  <span class="subtitle">28 detectors over a collected case, layered from behavioral heuristics to live intel matching, with auto-Sigma export per detector.</span>
+</h1>
+
+<h2>How they fit together</h2>
+
+<p>A detector implements <code>detect(store) -> Iterable[Finding]</code>. It reads
+artifacts from the store via <code>store.iter_artifacts(collector=...,
+category=...)</code>, applies its logic, and yields findings. Detectors don't
+talk to each other directly — they share the evidence store. Order is
+incidental, except <code>timeline</code> which runs last and depends on
+others.</p>
+
+<p>Each finding has a <strong>severity</strong>
+(<span class="pill info">info</span> <span class="pill low">low</span>
+<span class="pill med">med</span> <span class="pill high">high</span>
+<span class="pill crit">crit</span>), a MITRE ATT&amp;CK technique ID
+where applicable, a free-form evidence dict, and references to the
+underlying artifact UUIDs.</p>
+
+<h2>The roster</h2>
+
+<h3><code>suspicious_processes</code></h3>
+
+<p>Heuristics over the live process tree:</p>
+<ul>
+<li>Shell spawned by browser (Chrome/Firefox/Edge/Brave → sh/bash/powershell)</li>
+<li>Interpreters running from drop locations (<code>/tmp</code>, <code>%TEMP%</code>, <code>/Users/Public</code>, …)</li>
+<li>Process with no exe path (potential unlinked / memfd execution)</li>
+<li>PowerShell <code>-EncodedCommand</code> with long base64 payload</li>
+<li><code>curl|bash</code> and <code>iwr|iex</code> pipe-to-shell patterns</li>
+</ul>
+
+<h3><code>network_anomaly</code></h3>
+
+<p>Listening sockets outside a benign-port allow-list; established external
+connections (with the owning process linked back from the process collector).</p>
+
+<h3><code>persistence_outlier</code></h3>
+
+<p>Generic cross-platform: every artifact in category <code>persistence</code>
+is scanned for references to writable/world-shared paths
+(<code>/tmp/</code>, <code>/Users/Public/</code>, <code>\AppData\Local\Temp\</code>,
+<code>/dev/shm/</code>, …) and for binaries in user-writable scratch space.</p>
+
+<h3><code>lolbins</code></h3>
+
+<p>Living-off-the-land tradecraft. Pattern set covers LOLBAS (certutil,
+bitsadmin, mshta, regsvr32, rundll32 with URL, msbuild, installutil),
+GTFOBins (osascript shell escape, xattr quarantine removal, curl/wget fetching
+executable content, nc/socat reverse shells, python <code>socket.socket</code>
+one-liners, bash <code>/dev/tcp/</code>).</p>
+
+<h3><code>yara</code></h3>
+
+<p>If <code>yara-python</code> is installed, compiles every <code>.yar</code>/<code>.yara</code>
+file under <code>digger/rules/yara/</code> and any directory you pass via the
+detector's <code>extra_dirs</code> argument. Scans:</p>
+<ul>
+<li>The executables of running processes</li>
+<li>Files in the <code>recent_files</code> collector's drop-location walk</li>
+</ul>
+<p>Bundled rules cover mimikatz strings, Cobalt Strike default beacon strings,
+PowerView/PowerSploit, reverse-shell one-liners, credential-harvest keywords,
+and Shai-Hulud markers.</p>
+
+<h3><code>ioc</code></h3>
+
+<p>Plain-text IOC feeds from <code>digger/rules/iocs/*.txt</code>. Indicator
+type auto-detected by format: SHA-256 (64 hex), MD5 (32 hex), IPv4, URL,
+domain, path. Process exe SHA-256s are matched against the hash list; every
+artifact's serialized data is searched for IP/domain matches.</p>
+
+<h3><code>shai_hulud</code></h3>
+
+<p>Targeted detector for the Shai-Hulud npm worm:</p>
+<ul>
+<li>Compromised <code>name@version</code> matches against bundled list and
+  live <code>shai_hulud_packages</code> feed</li>
+<li>Workflow file matching <code>shai-hulud-workflow.yml</code> in any local repo</li>
+<li>Worm marker strings (<code>trufflehog</code>, <code>shai-hulud-workflow</code>,
+  <code>GITHUB_TOKEN</code>, …) in any workflow file body</li>
+<li><code>webhook.site/&lt;uuid&gt;</code> URLs in workflows or live process
+  command lines</li>
+</ul>
+
+<h3><code>supply_chain</code></h3>
+
+<p>Two layers:</p>
+<ul>
+<li><strong>Malicious-package match</strong> — npm/PyPI/gem package@version
+  pairs from the bundled list + live OpenSSF malicious-packages feed.</li>
+<li><strong>CISA KEV cross-check</strong> — installed-software inventory
+  matched against CISA Known Exploited Vulnerabilities entries (live feed
+  with bundled snapshot fallback).</li>
+</ul>
+
+<h3><code>c2</code></h3>
+
+<p>C2-framework signatures from <code>digger/rules/c2/c2_signatures.yaml</code>:
+Cobalt Strike, Sliver, Mythic, Brute Ratel, Havoc, Empire, Metasploit
+Meterpreter, Pupy, Posh-C2, AsyncRAT family. Matches against browser
+history URLs and process command lines.</p>
+
+<p>Also fuses live intel:</p>
+<ul>
+<li>Established connection IPs vs. ThreatFox</li>
+<li>Process exe SHA-256s vs. MalwareBazaar</li>
+<li>URLs vs. URLhaus</li>
+</ul>
+
+<h3><code>threat_actor</code></h3>
+
+<p>Named-actor TTP patterns from <code>digger/rules/threat_actors/ttp_signatures.yaml</code>:
+APT29/Midnight Blizzard, APT28, FIN7, Lazarus, Volt Typhoon, Scattered
+Spider/Octo Tempest, Black Basta/BlackCat/Akira ransomware affiliates.
+Attribution is heuristic — multiple actors share TTPs, so digger reports
+the match without making a definitive call.</p>
+
+<h3><code>browser</code></h3>
+
+<p>Flags Chrome/Edge/Brave/Firefox extensions with sweeping permissions:
+<code>&lt;all_urls&gt;</code>, <code>webRequest</code>, <code>cookies</code>,
+<code>history</code>, <code>clipboardRead/Write</code>, <code>nativeMessaging</code>,
+<code>debugger</code>, <code>management</code>, <code>proxy</code>.</p>
+
+<h3><code>env_hijack</code></h3>
+
+<p>Environment variables that override the dynamic linker
+(<code>LD_PRELOAD</code>, <code>LD_AUDIT</code>,
+<code>DYLD_INSERT_LIBRARIES</code>), shell init hooks
+(<code>PROMPT_COMMAND</code>, <code>BASH_ENV</code>, <code>ENV</code>),
+or PATH entries pointing at writable temp dirs.</p>
+
+<h3><code>ssh_auth_keys</code></h3>
+
+<p>authorized_keys with forced-command directives, unusually long key lists,
+unrestricted keys.</p>
+
+<h3><code>service_cve</code></h3>
+
+<p>Pulls service versions captured by <code>service_versions</code> collector
+and matches them against the live NVD CPE-keyed CVE corpus
+(<code>nvd_service_cves</code> feed, 24h refresh). Range-aware: handles
+<code>introduced</code> / <code>fixed</code> / <code>last_affected</code>
+OSV-style ranges with loose semver. No bundled fallback — runs only when
+the live cache is populated. Tag: T1190.</p>
+
+<h3><code>firewall_audit</code></h3>
+
+<p>See <a href="firewall-audit.html">Firewall audit + remediation</a>. Eight
+checks across pf / nftables / iptables / ufw / firewalld / WFP +
+macOS Application Firewall, with platform-specific copy-pasteable fix
+commands routed through <code>redact_dangerous_command</code>.</p>
+
+<h3>Counter-offensive detectors</h3>
+
+<p>Nine detectors target Decepticon-style red-team tradecraft, all
+observation-only. See <a href="decepticon-counter.html">Decepticon
+countermeasures</a> for the full phase-by-phase rundown.</p>
+
+<ul class="kv">
+  <li><b><code>recon</code></b> — portscan footprints, SSH brute-force /
+    banner-grab / user-enumeration (T1595.001, T1110.001, T1592.002, T1589.002)</li>
+  <li><b><code>exploitation</code></b> — service-spawns-shell, three-tier
+    RCE chains, 11 shellcode-shape cmdline patterns, web-server log
+    exploit signatures including Log4Shell / Spring4Shell / inline PHP
+    / Shellshock (T1190 / T1059 / T1203)</li>
+  <li><b><code>privesc</code></b> — world-writable setuid, setuid in
+    scratch / home, GTFOBins-trivial setuid (perl/python/awk/bash/cp/mv),
+    sudoers NOPASSWD: ALL, dangerous Linux file capabilities, kernel
+    taint bits decoded (T1548 / T1068 / T1547.006)</li>
+  <li><b><code>lateral</code></b> — SMB/SSH/WinRM/RDP/VNC outbound to
+    RFC1918, credential dumpers (mimikatz / Rubeus / SafetyKatz /
+    secretsdump / LaZagne / Certipy), Impacket / evil-winrm /
+    CrackMapExec / Responder by name, SSH ProxyJump, pass-the-hash
+    markers in Windows 4624 (T1021 / T1550 / T1570)</li>
+  <li><b><code>ad_attacks</code></b> — Kerberoasting (4769 RC4-HMAC),
+    AS-REP roast (4768 PreAuthType 0), BloodHound family, DCSync via
+    cmdline or 4662 replication-rights GUID, AdminSDHolder modification
+    (5136) (T1558.003 / T1558.004 / T1003.006 / T1484.001)</li>
+  <li><b><code>cloud_attacks</code></b> — IMDS endpoint (169.254.169.254)
+    hit from non-cloud-agent processes, cloud creds in shell env,
+    world-readable credentials files, container escape primitives,
+    kubeconfig theft, cloud-CLI privesc commands (T1552.005 / T1078.004
+    / T1611)</li>
+  <li><b><code>counter_re</code></b> — gdb / lldb / dtrace / x64dbg / IDA
+    / Ghidra / radare2 / frida / WindBg with target-PID matching digger
+    or an EDR / audit process; self-attribution via
+    <code>digger.opsec.self_id</code> (T1622 / T1057)</li>
+  <li><b><code>persistent_sessions</code></b> — tmux/screen/zellij
+    parented by network services, detached nohup/setsid with sockets,
+    user-systemd ExecStart in user-writable shell scripts (T1546 / T1543.002)</li>
+  <li><b><code>attacker_tooling</code></b> — 60+ red-team tools across 10
+    categories; running OR installed; self-attribution for dev-clone /
+    venv paths (T1588.002)</li>
+</ul>
+
+<h3><code>memory_anomaly</code> (extended)</h3>
+
+<p>RWX regions, anonymous-exec regions, drop-loaded modules — same as
+before, but severity now escalates to critical when the affected
+process's parent is a listening network service (the canonical
+post-RCE landing signature). Cross-correlates with the
+<code>exploitation</code> detector's parent-name set.</p>
+
+<h3><code>browser</code> (extended)</h3>
+
+<p>See <a href="browser-scanner.html">Browser scanner</a> for the full
+list of branches. Beyond the original risky-extension check, the
+detector now covers cookies (counts + bad-host), saved-passwords
+summary, IndexedDB / Local Storage / PWAs / profile defaults, service
+workers with URLhaus + ThreatFox cross-reference, and a corpus-driven
+detection for <a href="chromium-unpatched.html">unpatched Chromium
+bugs</a>.</p>
+
+<h3><code>sigma</code></h3>
+
+<p>Optional. Run via <code>digger sigma --case-dir &lt;case&gt;</code>. Loads
+Sigma YAML rules from the bundled corpus AND the live SigmaHQ rule
+cache (<code>sigmahq_corpus</code> feed), matches them against
+process_creation and network_connection log sources. See
+<a href="sigma.html">Sigma rules</a>.</p>
+
+<h3><code>timeline</code></h3>
+
+<p>Synthesizes a chronological event timeline from process create times,
+recent-file mtimes, and macOS quarantine timestamps. Emits one informational
+finding containing up to 2000 sorted events for report rendering.</p>
+
+<h2>Running a subset</h2>
+
+<pre><code>digger scan --case-dir x --only suspicious_processes,c2,shai_hulud</code></pre>
+
+<h2>Severity ladders</h2>
+
+<table>
+<thead><tr><th>Pill</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><span class="pill crit">critical</span></td><td>High-confidence malicious. Examples: confirmed Shai-Hulud package, MalwareBazaar hash match on a running exe, live ThreatFox IP match.</td></tr>
+<tr><td><span class="pill high">high</span></td><td>Strong tradecraft signal: encoded PowerShell, certutil URL cache, browser-spawns-shell, LD_PRELOAD set.</td></tr>
+<tr><td><span class="pill med">medium</span></td><td>Suspicious but plausibly explainable: process with no exe, browser extension with sweeping perms, persistence pointing at user-scratch path.</td></tr>
+<tr><td><span class="pill low">low</span></td><td>Worth a glance: listener on unusual port.</td></tr>
+<tr><td><span class="pill info">info</span></td><td>Not an indicator of compromise. External connection record, timeline summary.</td></tr>
+</tbody>
+</table>
+
+<p>The AI triage step <a href="ai-triage.html">re-grades severity</a>
+independently using the IC estimative-probability ladder.</p>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

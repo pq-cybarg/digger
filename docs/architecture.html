@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Architecture — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="architecture">
+<main>
+
+<h1>Architecture
+  <span class="subtitle">One evidence store, many components. Every module reads or writes it; nothing communicates out-of-band.</span>
+</h1>
+
+<h2>Big picture</h2>
+
+<figure class="diagram">
+  <img src="pipeline.svg" alt="digger pipeline: collectors produce artifacts into a hash-chained SQLite evidence store; detectors query the store and write findings; AI triage augments findings; outputs include HTML/MD/JSON reports, STIX/MISP/ATT&amp;CK Navigator exports, and per-framework compliance reports">
+</figure>
+
+<p>Three rules govern how the parts fit together:</p>
+
+<ol>
+<li><strong>Append-only.</strong> Once an artifact or finding is written it is
+  never modified. Updates are forbidden by the hash chain (any modification
+  invalidates downstream hashes and any PQC signature over the chain tip).
+  The single exception is the per-finding <code>triage_json</code> column,
+  which is populated by the AI triage step and not covered by the chain.</li>
+<li><strong>Single source of truth.</strong> Detectors don't talk to collectors
+  directly. AI triage doesn't see raw OS state. Reports don't re-collect.
+  Everything operates on rows in the evidence DB. This lets you run any stage
+  offline against an existing case directory.</li>
+<li><strong>Algorithm-agile, data-driven.</strong> Detector behavior is
+  shaped by YAML rule files (<code>digger/rules/</code>) and live cached feeds
+  (<code>digger/intel/</code>). Compliance behavior is shaped by YAML control
+  catalogs (<code>digger/compliance/frameworks/</code>). PQC algorithms come
+  from what liboqs exposes at runtime, not a hard-coded list.</li>
+</ol>
+
+<h2>Module layout</h2>
+
+<table>
+<thead><tr><th>Module</th><th>Role</th><th>Talks to</th></tr></thead>
+<tbody>
+<tr><td><code>digger/core/</code></td><td>Evidence store, base Collector class, runner, hashing, platform detection</td><td>SQLite</td></tr>
+<tr><td><code>digger/collectors/</code></td><td>~30 platform-aware artifact collectors</td><td>OS APIs (psutil), CLI tools, plist/registry</td></tr>
+<tr><td><code>digger/detectors/</code></td><td>28 detectors over artifacts: behavioral, YARA, IOC, Sigma, C2, supply-chain, threat-actor, service-version CVE, plus 9 <a href="decepticon-counter.html">Decepticon countermeasures</a>, timeline</td><td>Evidence store, <code>digger/rules/</code>, <code>digger/intel/</code></td></tr>
+<tr><td><code>digger/firewall/</code></td><td>Unified pf / nftables / iptables / ufw / firewalld / WFP audit + remediation</td><td>Evidence store, <code>digger.ethics.contract</code></td></tr>
+<tr><td><code>digger/ethics/</code></td><td>Codified ethical contract (10 principles, programmatically enforced) + pre-engagement scope attestation</td><td>Used by every state-modifying feature</td></tr>
+<tr><td><code>digger/intel/</code></td><td>15 live threat-intel feeds + background scheduler + composite multi-URL fetchers (NVD, SigmaHQ, MITRE ATT&amp;CK STIX)</td><td>HTTP (CISA, abuse.ch, Spamhaus, GitHub, OpenSSF, NVD, mitre-attack, sigmahq, …)</td></tr>
+<tr><td><code>digger/ai/</code></td><td>OpenAI-compatible client, ICD-203-compliant triage prompts and schema</td><td>HTTP (llama.cpp / ollama / vllm)</td></tr>
+<tr><td><code>digger/crypto/</code></td><td>liboqs-backed NIST PQC; sign, verify, hybrid PQC-KEM + AES-256-GCM</td><td>oqs-python, cryptography</td></tr>
+<tr><td><code>digger/fips/</code></td><td>FIPS 140-3 mode + KAT self-test + algorithm gating</td><td>—</td></tr>
+<tr><td><code>digger/compliance/</code></td><td>18 framework catalogs + control assessor + reports</td><td>Evidence store</td></tr>
+<tr><td><code>digger/tradecraft/</code></td><td>ICD 203 estimative probability, NATO Admiralty, TLP, ACH</td><td>—</td></tr>
+<tr><td><code>digger/exchange/</code></td><td>STIX 2.1, MISP, ATT&amp;CK Navigator, TAXII 2.1, Sigma loader</td><td>HTTP for TAXII; pure Python otherwise</td></tr>
+<tr><td><code>digger/coc/</code></td><td>ISO/IEC 27037 + NIST SP 800-86 chain-of-custody record</td><td>JSON sidecar file</td></tr>
+<tr><td><code>digger/report/</code></td><td>JSON, Markdown, self-contained HTML reports</td><td>Evidence store</td></tr>
+<tr><td><code>digger/cli.py</code></td><td>argparse-driven entry point; sub-commands are thin wrappers over the modules above</td><td>All of the above</td></tr>
+</tbody>
+</table>
+
+<h2>Pipeline stages</h2>
+
+<h3>Collect</h3>
+
+<p>The runner pulls the list of collectors appropriate to the current OS from
+<code>digger/collectors/__init__.py:all_collectors()</code>. For each, it
+calls <code>Collector.run()</code> which:</p>
+<ol>
+<li>Checks <code>supported_os</code> and <code>requires_admin</code>; logs a skip if not satisfied.</li>
+<li>Iterates the collector's <code>collect()</code> generator, calling <code>store.add_artifact()</code> for each <code>Artifact</code>.</li>
+<li>Catches any unexpected exception, logs it, and continues.</li>
+</ol>
+
+<p>The runner also writes case metadata, opens a chain-of-custody record, and
+appends <code>collection_started</code> / <code>collection_finished</code>
+events.</p>
+
+<h3>Scan</h3>
+
+<p>Detectors implement <code>detect(store) -> Iterable[Finding]</code>. They
+read artifacts back from the store via <code>store.iter_artifacts(collector=...)</code>
+and emit Findings, each tagged with severity, MITRE ATT&amp;CK technique,
+artifact references, and free-form evidence dict.</p>
+
+<p>Detectors are independent — order in the registry doesn't matter except
+<code>TimelineBuilder</code>, which runs last and consumes other findings to
+synthesize a chronological event view.</p>
+
+<h3>Triage</h3>
+
+<p><code>TriageRunner</code> walks the findings (above a configurable severity
+threshold) and POSTs each plus its referenced artifacts to the LLM. The
+response must conform to a JSON schema enforced by the prompt and (where
+the server supports it) by structured-output. The triage payload is stored
+in <code>findings.triage_json</code>. Finally, a case-wide executive summary
+is generated and persisted to case metadata.</p>
+
+<p>The schema requires IC-grade outputs:
+<a href="tradecraft.html">estimative probability, analytic confidence,
+source/info reliability, TLP marking, assumptions, alternative hypotheses</a>.</p>
+
+<h3>Report / export</h3>
+
+<p>Reports and exports never re-derive evidence. They only read the SQLite store
+and the case_meta table.</p>
+
+<dl class="kv">
+  <dt>JSON</dt><dd>Full structured dump for downstream tooling.</dd>
+  <dt>Markdown</dt><dd>Print-friendly, embeddable in tickets.</dd>
+  <dt>HTML</dt><dd>Self-contained, embedded SVG, severity-filtered finding cards.</dd>
+  <dt>STIX 2.1</dt><dd>Bundle with incident, indicators, attack-patterns, TLP marking definitions.</dd>
+  <dt>MISP</dt><dd>Event JSON with MITRE ATT&amp;CK galaxy tags.</dd>
+  <dt>ATT&amp;CK Navigator</dt><dd>Layer JSON for the matrix viewer.</dd>
+  <dt>Compliance</dt><dd>Per-framework JSON/MD/HTML with pass/fail/manual/partial per control.</dd>
+</dl>
+
+<h2>What does <em>not</em> happen automatically</h2>
+
+<p>Some design choices are deliberate non-features:</p>
+
+<ul>
+<li><strong>No cloud telemetry.</strong> digger never phones home, never sends
+  the case anywhere. Intel feed fetches are the only outbound traffic, and
+  they're explicit opt-in (you have to run <code>digger intel update</code>
+  or <code>digger intel watch</code>).</li>
+<li><strong>No automatic remediation.</strong> Findings describe what was
+  observed and recommend next steps. They never modify the host. Killing
+  processes, removing files, or quarantining is your call.</li>
+<li><strong>No live blocking.</strong> digger is a forensic snapshot tool,
+  not an EDR agent. It does not hook syscalls or inject into kernel space.
+  Run it periodically or on suspicion.</li>
+<li><strong>No automatic Internet IOC enrichment of every artifact.</strong>
+  IOCs from cached feeds are matched against artifacts locally. We do not
+  submit hashes / URLs / IPs to VirusTotal or similar by default.</li>
+</ul>
+
+<h2>Dependency graph</h2>
+
+<pre><code>cli.py
+  ├── core.runner         core.evidence, coc.record, collectors.*, fips
+  ├── detectors.*         core.evidence, detectors._rules_io ←─ rules/*, intel/feeds
+  ├── ai.triage           ai.llama_client, ai.prompts, core.evidence
+  ├── crypto.pqc          fips.mode (gating)
+  ├── compliance.assessor compliance.frameworks/*.yaml, core.evidence
+  ├── exchange.*          tradecraft.tlp, core.evidence
+  └── report.*            assets, core.evidence</code></pre>
+
+<p>There are no circular imports. Modules under
+<code>digger/compliance/</code>, <code>digger/exchange/</code>,
+<code>digger/intel/</code>, and <code>digger/ai/</code> can each be used
+standalone if you import them directly, without ever touching the collector
+or detector code.</p>
+
+<h2>Further reading</h2>
+
+<div class="cards">
+  <a class="card" href="evidence-store.html"><h3>Evidence store →</h3>
+    <p>SQLite schema, hash chain, tamper detection, signing.</p></a>
+  <a class="card" href="collectors.html"><h3>Collectors →</h3>
+    <p>Every bundled collector, what it grabs, when it needs admin.</p></a>
+  <a class="card" href="detectors.html"><h3>Detectors →</h3>
+    <p>What each detector looks for, how it grades severity.</p></a>
+  <a class="card" href="extending.html"><h3>Extending →</h3>
+    <p>Writing your own collector / detector / framework.</p></a>
+</div>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

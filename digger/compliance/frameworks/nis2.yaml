@@ -1,0 +1,61 @@
+id: EU_NIS2
+title: EU NIS 2 Directive (Directive (EU) 2022/2555)
+version: "2022/2555"
+publisher: European Parliament and Council
+url: https://digital-strategy.ec.europa.eu/en/policies/nis2-directive
+description: |
+  Cyber security measures for essential and important entities across
+  the Union. Article 21 details technical, operational, and
+  organisational measures.
+
+controls:
+  - id: Art-21-a
+    title: Policies on risk analysis and information system security
+    family: Article 21
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: Art-21-b
+    title: Incident handling (prevention, detection, response)
+    family: Article 21
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - artifact_present: network
+  - id: Art-21-c
+    title: Business continuity and crisis management
+    family: Article 21
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: Art-21-d
+    title: Supply chain security
+    family: Article 21
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: supply_chain
+      - no_finding_with_detector: shai_hulud
+  - id: Art-21-e
+    title: Security in network and information systems acquisition, development, maintenance
+    family: Article 21
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: Art-21-f
+    title: Policies for effectiveness assessment of cybersecurity risk management
+    family: Article 21
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: Art-21-g
+    title: Basic cyber hygiene practices and training
+    family: Article 21
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: Art-21-h
+    title: Cryptography and where appropriate encryption
+    family: Article 21
+    severity_if_failed: high
+    checks: [{manual: true}]
+    references: ["NIS 2 Art. 21(2)(h)"]
+  - id: Art-23
+    title: Reporting obligations (24h early warning, 72h notification)
+    family: Article 23
+    severity_if_failed: high
+    checks: [{manual: true}]

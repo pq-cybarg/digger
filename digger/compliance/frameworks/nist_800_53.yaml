@@ -1,0 +1,229 @@
+id: NIST_SP_800_53_Rev5
+title: NIST SP 800-53 Rev. 5 — Security and Privacy Controls for Information Systems and Organizations
+version: "Rev 5.1.1"
+publisher: National Institute of Standards and Technology
+url: https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final
+description: |
+  Catalog of security and privacy controls for U.S. federal information
+  systems and organizations. This file is a digger-actionable subset of
+  the most endpoint-evaluable controls, mapped to artifacts digger
+  collects. Controls not represented here may still apply; review the
+  full publication for completeness.
+
+controls:
+  # --- AU: Audit and Accountability --- #
+  - id: AU-2
+    title: Event Logging
+    family: AU
+    summary: Organization defines event types to be logged and reasons logging is needed.
+    severity_if_failed: medium
+    checks:
+      - artifact_present: windows.event_logs
+      - artifact_present: linux.audit
+      - artifact_present: macos.unified_logs
+    references: ["NIST SP 800-53 §AU-2"]
+
+  - id: AU-3
+    title: Content of Audit Records
+    family: AU
+    summary: Audit records contain who/what/when/where/outcome.
+    severity_if_failed: medium
+    checks:
+      - manual: true
+
+  - id: AU-6
+    title: Audit Record Review, Analysis, and Reporting
+    family: AU
+    summary: Organization reviews and analyzes audit records for indications of inappropriate activity.
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - artifact_present: network
+
+  - id: AU-12
+    title: Audit Record Generation
+    family: AU
+    summary: Information system provides audit record generation capability.
+    severity_if_failed: high
+    checks:
+      - artifact_present: windows.event_logs
+      - artifact_present: linux.audit
+
+  # --- AC: Access Control --- #
+  - id: AC-2
+    title: Account Management
+    family: AC
+    summary: Organization manages information system accounts.
+    severity_if_failed: high
+    checks:
+      - artifact_present: users
+
+  - id: AC-3
+    title: Access Enforcement
+    family: AC
+    summary: Information system enforces approved authorizations.
+    severity_if_failed: high
+    checks:
+      - artifact_present: users
+      - artifact_present: linux.sudoers
+
+  - id: AC-6
+    title: Least Privilege
+    family: AC
+    summary: Employ principle of least privilege.
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: ssh_auth_keys
+
+  - id: AC-17
+    title: Remote Access
+    family: AC
+    summary: Establish remote access policies and monitor remote sessions.
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: c2
+
+  # --- IA: Identification and Authentication --- #
+  - id: IA-2
+    title: Identification and Authentication (Organizational Users)
+    family: IA
+    summary: System uniquely identifies and authenticates users.
+    severity_if_failed: high
+    checks:
+      - artifact_present: users
+
+  - id: IA-5
+    title: Authenticator Management
+    family: IA
+    summary: Management of system authenticators (passwords, keys, tokens).
+    severity_if_failed: high
+    checks:
+      - artifact_present: ssh_keys
+
+  # --- CM: Configuration Management --- #
+  - id: CM-7
+    title: Least Functionality
+    family: CM
+    summary: Configure system to provide only essential capabilities.
+    severity_if_failed: medium
+    checks:
+      - no_finding_with_detector: persistence_outlier
+
+  - id: CM-8
+    title: System Component Inventory
+    family: CM
+    summary: Inventory of system components.
+    severity_if_failed: medium
+    checks:
+      - artifact_present: installed_software
+      - artifact_present: python_packages
+      - artifact_present: npm_packages
+
+  # --- SI: System and Information Integrity --- #
+  - id: SI-2
+    title: Flaw Remediation
+    family: SI
+    summary: Identify, report, and correct system flaws.
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: supply_chain
+
+  - id: SI-3
+    title: Malicious Code Protection
+    family: SI
+    summary: Anti-malware mechanisms in place.
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: yara
+      - no_finding_with_detector: c2
+
+  - id: SI-4
+    title: System Monitoring
+    family: SI
+    summary: Monitor information system to detect attacks and indicators of potential attacks.
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - artifact_present: network
+      - no_finding_above: high
+
+  - id: SI-7
+    title: Software, Firmware, and Information Integrity
+    family: SI
+    summary: Detect unauthorized changes to software, firmware, and information.
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: shai_hulud
+      - no_finding_with_detector: persistence_outlier
+
+  # --- SC: System and Communications Protection --- #
+  - id: SC-7
+    title: Boundary Protection
+    family: SC
+    summary: Monitor and control communications at boundaries.
+    severity_if_failed: high
+    checks:
+      - artifact_present: network
+
+  - id: SC-13
+    title: Cryptographic Protection
+    family: SC
+    summary: Use FIPS-validated cryptography.
+    severity_if_failed: high
+    checks:
+      - manual: true
+    references: ["NIST SP 800-53 §SC-13", "FIPS 140-3"]
+
+  - id: SC-28
+    title: Protection of Information at Rest
+    family: SC
+    summary: Protect information at rest.
+    severity_if_failed: high
+    checks:
+      - manual: true
+
+  # --- IR: Incident Response --- #
+  - id: IR-4
+    title: Incident Handling
+    family: IR
+    summary: Implement an incident handling capability.
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes  # digger itself is the IR tool — its presence is partial coverage
+
+  - id: IR-5
+    title: Incident Monitoring
+    family: IR
+    summary: Track and document information system security incidents.
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+
+  - id: IR-6
+    title: Incident Reporting
+    family: IR
+    summary: Report incidents within established timeframes.
+    severity_if_failed: high
+    checks:
+      - manual: true
+
+mapping_to_other_frameworks:
+  CMMC_2_0:
+    AU-2: ["AU.L2-3.3.1"]
+    AU-6: ["AU.L2-3.3.5"]
+    AC-2: ["AC.L1-3.1.1"]
+    AC-6: ["AC.L2-3.1.5"]
+    IA-2: ["IA.L1-3.5.1"]
+    CM-7: ["CM.L2-3.4.6"]
+    CM-8: ["CM.L2-3.4.1"]
+    SI-3: ["SI.L1-3.14.2"]
+    SI-4: ["SI.L1-3.14.6"]
+    IR-4: ["IR.L2-3.6.2"]
+  ISO_27001:
+    AU-2: ["A.8.15"]
+    AC-2: ["A.5.16"]
+    AC-6: ["A.8.2"]
+    SI-3: ["A.8.7"]
+    SI-4: ["A.8.16"]
+    SC-13: ["A.8.24"]
+    IR-4: ["A.5.24"]

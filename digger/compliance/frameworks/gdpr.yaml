@@ -1,0 +1,44 @@
+id: EU_GDPR
+title: EU General Data Protection Regulation 2016/679
+version: "2016/679"
+publisher: European Parliament and Council
+url: https://gdpr-info.eu/
+description: |
+  GDPR is a privacy regulation, not a technical standard, but Articles 32
+  (security of processing), 33 (breach notification), and 25 (data
+  protection by design) have endpoint-observable implications.
+
+controls:
+  - id: Art-25
+    title: Data protection by design and by default
+    family: Article 25
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: Art-32-1-a
+    title: Pseudonymisation and encryption of personal data
+    family: Article 32
+    severity_if_failed: high
+    checks: [{manual: true}]
+    references: ["GDPR Art. 32(1)(a)"]
+  - id: Art-32-1-b
+    title: Ability to ensure the ongoing confidentiality, integrity, availability, resilience
+    family: Article 32
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - artifact_present: network
+  - id: Art-32-1-d
+    title: Process for regularly testing, assessing, and evaluating effectiveness of security measures
+    family: Article 32
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: Art-33
+    title: Notification of personal data breach to supervisory authority within 72 hours
+    family: Article 33
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: Art-35
+    title: Data Protection Impact Assessment for high-risk processing
+    family: Article 35
+    severity_if_failed: medium
+    checks: [{manual: true}]

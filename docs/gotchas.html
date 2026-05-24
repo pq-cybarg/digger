@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gotchas — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="gotchas">
+<main>
+
+<h1>Gotchas
+  <span class="subtitle">Things that bit us building this; that will bite you extending it.</span>
+</h1>
+
+<h2>Triple-quote conflict in the ASCII logo</h2>
+
+<p><code>digger/assets/__init__.py</code> uses <code>r'''...'''</code> — not
+<code>r"""..."""</code> — because the ASCII art contains four double-quote
+characters that Python parses as the closer of a triple-double-quoted string.
+Don't switch the delimiter.</p>
+
+<h2>Platform-only imports must be inside functions</h2>
+
+<p><code>pwd</code>, <code>grp</code>, <code>winreg</code>, and <code>Evtx</code>
+are platform- or extra-specific. Import them inside the function that uses
+them, never at module top level — otherwise loading the collectors registry
+on the wrong OS / without the extra will fail.</p>
+
+<pre><code># wrong
+import winreg
+class MyCollector(Collector): ...
+
+# right
+class MyCollector(Collector):
+    def collect(self):
+        import winreg
+        ...</code></pre>
+
+<h2>Don't print without <code>--no-banner</code> in scripts</h2>
+
+<p>The ASCII banner prints to stdout by default. CI / scripting / piping into
+<code>jq</code> all want <code>--no-banner</code> to keep stdout clean.</p>
+
+<h2>Browser SQLite databases must be opened read-only</h2>
+
+<p>Use the SQLite URI form to mark a connection immutable + read-only:</p>
+
+<pre><code>uri = f"file:{db_path}?immutable=1&amp;mode=ro"
+sqlite3.connect(uri, uri=True)</code></pre>
+
+<p>Otherwise SQLite will try to acquire a write lock, contend with the running
+browser, and either hang or corrupt the journal. The bundled
+<code>browsers</code>, <code>macos.tcc</code>, and <code>macos.quarantine</code>
+collectors all do this.</p>
+
+<h2><code>psutil.process_iter</code> with per-process AccessDenied</h2>
+
+<p>Iterating processes with <code>process_iter(attrs=[...])</code> returns a
+shallow dict of whatever was readable. Calling additional methods
+(<code>net_connections</code>, <code>open_files</code>, <code>environ</code>)
+can raise <code>psutil.AccessDenied</code> per-process. Wrap each call in
+its own try/except and continue.</p>
+
+<h2>The hash chain doesn't cover triage output</h2>
+
+<p>The <code>findings.triage_json</code> column is updated post-hoc by the
+AI triage runner and is <strong>not</strong> part of the hash chain. That's
+intentional — it lets you re-triage with a different model without breaking
+the forensic chain. If you need to attest to a specific triage run, snapshot
+the case directory and sign the snapshot externally.</p>
+
+<h2>Detector order matters once (and only once)</h2>
+
+<p><code>TimelineBuilder</code> reads other findings to synthesize timeline
+events. It must run after every other detector. Everything else is order-
+independent.</p>
+
+<h2>liboqs version mismatch warning</h2>
+
+<p><code>UserWarning: liboqs version (major, minor) 0.15.0 differs from
+liboqs-python version 0.14.1</code> is emitted at import time by some
+oqs-python builds. It's harmless — the binding is forward-compatible for
+the algorithm surface digger uses. Pin both versions in production if you
+prefer a quiet log.</p>
+
+<h2>Intel feed parsers should never raise</h2>
+
+<p>If a feed source changes its schema, the parser should return an empty or
+best-effort dict, not crash. <code>update_feed</code> reports parse errors
+in the result but doesn't propagate them, so a single broken feed doesn't
+prevent the rest from refreshing.</p>
+
+<h2>YAML in compliance frameworks needs <code>checks: [{manual: true}]</code></h2>
+
+<p>A control with <em>zero</em> checks is reported as <code>manual</code> with
+no rationale. If you want it to render with the explicit reason, use the
+single-item list form: <code>checks: [{manual: true}]</code>.</p>
+
+<h2>TLP filter is "and-stricter," not equality</h2>
+
+<p><code>can_share(item_tlp, sharing_level)</code> returns true iff the item's
+TLP is at-most-as-strict as the sharing level. Exporting at TLP:GREEN
+includes TLP:CLEAR + TLP:GREEN findings, not just TLP:GREEN.</p>
+
+<h2>FIPS gating only fires on the PQC paths</h2>
+
+<p>The current FIPS-mode enforcement covers PQC sign / KEM and the
+helper-level symmetric checks. Hash and AES-GCM operations go through
+<code>cryptography</code> and <code>hashlib</code> directly — those are
+FIPS-policy at the OS/provider layer, not at digger's user-mode layer.</p>
+
+<h2>Sigma rules with unsupported features are silently skipped</h2>
+
+<p>We do not error on Sigma rules that use count aggregation, complex
+parenthesized conditions, or non-process/non-network log sources — they're
+silently skipped. If you expect a rule to fire and it doesn't, run with
+the loader directly in Python and inspect what got loaded.</p>
+
+</main>
+<script src="highlight.js"></script>
+<script src="docs.js"></script>
+</body>
+</html>

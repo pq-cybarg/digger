@@ -1,0 +1,63 @@
+id: CIS_Apple_macOS_Sonoma
+title: CIS Apple macOS 14.x Sonoma Benchmark
+version: "v1.0.0"
+publisher: Center for Internet Security
+url: https://www.cisecurity.org/benchmark/apple_macos
+description: |
+  Subset of the CIS macOS Sonoma benchmark — endpoint-observable controls.
+
+controls:
+  - id: "2.6.1"
+    title: Ensure FileVault Is Enabled
+    family: System Preferences
+    severity_if_failed: high
+    checks:
+      - data_contains:
+          collector: macos.security_posture
+          subject_glob: "fdesetup-status"
+          field: raw
+          pattern: "FileVault is On"
+    references: ["CIS macOS Sonoma §2.6.1"]
+  - id: "2.6.2"
+    title: Ensure Gatekeeper Is Enabled
+    family: System Preferences
+    severity_if_failed: high
+    checks:
+      - data_contains:
+          collector: macos.security_posture
+          subject_glob: "spctl-status"
+          field: raw
+          pattern: "assessments enabled"
+    references: ["CIS macOS Sonoma §2.6.2"]
+  - id: "2.6.4"
+    title: Ensure Firewall Is Enabled
+    family: System Preferences
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: "2.10"
+    title: Ensure System Integrity Protection Is Enabled
+    family: System Preferences
+    severity_if_failed: high
+    checks:
+      - data_contains:
+          collector: macos.security_posture
+          subject_glob: "csrutil-status"
+          field: raw
+          pattern: "enabled"
+    references: ["CIS macOS Sonoma §2.10"]
+  - id: "3.1"
+    title: Ensure Security Auditing Is Enabled
+    family: Audit
+    severity_if_failed: high
+    checks:
+      - artifact_present: macos.unified_logs
+  - id: "5.1.1"
+    title: Ensure Home Folders Are Secure
+    family: Access Control
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: "6.3.1"
+    title: Ensure Safari is configured to load only secure content
+    family: Safari
+    severity_if_failed: medium
+    checks: [{manual: true}]

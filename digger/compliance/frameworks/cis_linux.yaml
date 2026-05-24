@@ -1,0 +1,56 @@
+id: CIS_Linux_Distribution
+title: CIS Distribution-Independent Linux Benchmark
+version: "v3.0.0"
+publisher: Center for Internet Security
+url: https://www.cisecurity.org/benchmark/distribution_independent_linux
+description: Subset of distribution-independent Linux server controls.
+
+controls:
+  - id: "1.4.1"
+    title: Ensure permissions on bootloader config are configured
+    family: Initial Setup
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: "3.5.1"
+    title: Ensure host-based firewall is enabled and configured
+    family: Network Configuration
+    severity_if_failed: high
+    checks:
+      - data_contains:
+          collector: network
+          subject_glob: "iptables"
+          field: raw
+          pattern: "."
+  - id: "4.1"
+    title: Ensure auditd is installed and active
+    family: Logging and Auditing
+    severity_if_failed: high
+    checks:
+      - artifact_present: linux.audit
+  - id: "4.1.3"
+    title: Ensure auditing for processes that start prior to auditd is enabled
+    family: Logging and Auditing
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: "5.2.1"
+    title: Ensure SSH configuration is hardened
+    family: Access, Authentication and Authorization
+    severity_if_failed: high
+    checks:
+      - artifact_present: ssh_keys
+  - id: "5.3.4"
+    title: Ensure use of strong password hashing algorithm (sha512)
+    family: PAM
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: "6.1.10"
+    title: Ensure no world-writable files exist in critical locations
+    family: System File Permissions
+    severity_if_failed: medium
+    checks: [{manual: true}]
+  - id: "6.2.1"
+    title: Ensure accounts in /etc/passwd use shadowed passwords
+    family: User and Group Settings
+    severity_if_failed: high
+    checks:
+      - artifact_present: users

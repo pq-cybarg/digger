@@ -1,0 +1,68 @@
+# Class: "known-bug-the-vendor-won't-fix-but-affects-every-Chrome-user"
+#
+# This corpus tracks browser bugs that:
+#   - Have been publicly disclosed
+#   - Are NOT patched in the latest stable Chromium / Chrome
+#   - Affect a large fraction (often 100%) of Chromium-based browsers
+#     (Chrome, Edge, Brave, Arc, Vivaldi, Opera)
+#
+# Detection model: each entry declares a ``detection_signal`` that maps to
+# an artifact pattern the BrowserDetector already collects. Adding a new
+# entry adds a detection without code changes — the detector is corpus-
+# driven for this category.
+#
+# This file is *digger-curated* because there is no canonical upstream
+# "vendor-won't-fix browser bugs" feed (Project Zero's 90-day-disclosure
+# tracker is the closest, but it covers fixed bugs too and isn't a stable
+# machine-readable feed). When such a feed becomes available, swap to
+# load_intel() and demote this file to a fallback per the live-first
+# convention.
+#
+# Entry schema:
+#   id              stable digger identifier (crbug-#####)
+#   short_id        the upstream bug tracker number alone
+#   title           human-readable one-liner
+#   url             upstream bug tracker URL
+#   discovered      year first observed in the wild (or N/A)
+#   disclosed       year publicly disclosed
+#   vendor_status   one of: "private", "won't fix", "out of scope", "pending"
+#   affected_versions  version range string ("all" = open-ended unpatched)
+#   impact          info | low | medium | high | critical
+#   detection_signal:
+#     kind          one of: service_worker_presence | extension_perm |
+#                           profile_default | always_fire
+#     threshold     "any" or integer count
+#   workaround      list of operator-actionable mitigations
+#   references      list of advisory URLs
+#   notes           free-form context
+
+issues:
+
+  - id: crbug-40062121
+    short_id: "40062121"
+    title: "Persistent service-worker + background-fetch botnet primitive"
+    url: "https://issues.chromium.org/issues/40062121"
+    discovered: "2022"
+    disclosed: "2022"
+    vendor_status: "private"
+    affected_versions: "all"
+    impact: "high"
+    detection_signal:
+      kind: "service_worker_presence"
+      threshold: "any"
+    workaround:
+      - "Open chrome://serviceworker-internals and unregister any origins you do not recognize"
+      - "Periodically purge ~/Library/Application Support/<browser>/<profile>/Service Worker/ (browser quit first)"
+      - "Disable site-isolation/notification permissions on origins not actively needed"
+    references:
+      - "https://issues.chromium.org/issues/40062121"
+      - "https://www.programmez.com/actualites/chrome-google-publie-par-erreur-une-faille-critique-jamais-fixee-depuis-2022-39490"
+    notes: |
+      Disclosed summer 2022 by Lyra Rebane. The Chromium ticket was made
+      private after disclosure; no patch has shipped to date. Mechanism:
+      a registered service worker can keep firing background fetches and
+      keep its parent registration alive long after the tab that installed
+      it has closed, effectively turning the browser into a permanent
+      botnet node controlled by the origin that registered the worker.
+      Affects every Chromium-based browser at every version, because the
+      fix has never landed upstream.

@@ -1,0 +1,54 @@
+id: HIPAA_Security_Rule
+title: HIPAA Security Rule (45 CFR Parts 160 and 164, Subparts A and C)
+version: "2024 NPRM"
+publisher: U.S. Department of Health and Human Services (HHS / OCR)
+url: https://www.hhs.gov/hipaa/for-professionals/security/index.html
+description: |
+  Administrative, physical, and technical safeguards for electronic
+  protected health information (ePHI).
+
+controls:
+  - id: "164.308(a)(1)(ii)(D)"
+    title: Information system activity review
+    family: Administrative Safeguards
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+  - id: "164.308(a)(4)"
+    title: Access management
+    family: Administrative
+    severity_if_failed: high
+    checks:
+      - artifact_present: users
+  - id: "164.308(a)(5)(ii)(B)"
+    title: Protection from malicious software
+    family: Administrative
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: yara
+      - no_finding_with_detector: c2
+  - id: "164.308(a)(6)"
+    title: Security incident procedures
+    family: Administrative
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: "164.312(a)(1)"
+    title: Access control — unique user identification
+    family: Technical Safeguards
+    severity_if_failed: high
+    checks:
+      - artifact_present: users
+  - id: "164.312(b)"
+    title: Audit controls
+    family: Technical
+    severity_if_failed: high
+    checks:
+      - artifact_present: windows.event_logs
+      - artifact_present: linux.audit
+      - artifact_present: macos.unified_logs
+  - id: "164.312(e)(1)"
+    title: Transmission security
+    family: Technical
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: c2

@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "digger"
+version = "0.1.0"
+description = "Cross-platform forensics-grade endpoint investigation suite with local-LLM triage"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "digger" }]
+dependencies = [
+    "psutil>=5.9",
+    "requests>=2.31",
+    "rich>=13.7",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+yara = ["yara-python>=4.5"]
+windows = ["python-evtx>=0.8", "python-registry>=1.4", "pywin32>=306; platform_system=='Windows'"]
+intel = ["maxminddb>=2.5"]
+all = ["yara-python>=4.5", "python-evtx>=0.8", "python-registry>=1.4", "maxminddb>=2.5"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.4"]
+
+[project.scripts]
+digger = "digger.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["digger*"]
+
+[tool.setuptools.package-data]
+digger = [
+    "rules/**/*",
+    "rules/yara/*.yar",
+    "rules/iocs/*.txt",
+    "rules/sigma/*.yml",
+    "ai/prompts/*.md",
+    "assets/*.svg",
+    "compliance/frameworks/*.yaml",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"

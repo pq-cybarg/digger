@@ -1,0 +1,110 @@
+id: NIST_CSF_2_0
+title: NIST Cybersecurity Framework 2.0
+version: "2.0"
+publisher: National Institute of Standards and Technology
+url: https://www.nist.gov/cyberframework
+description: |
+  CSF 2.0 organizes cybersecurity activities into six functions:
+  GOVERN, IDENTIFY, PROTECT, DETECT, RESPOND, RECOVER. This catalog
+  binds endpoint-observable subcategories to digger checks.
+
+controls:
+  # --- GOVERN --- #
+  - id: GV.OC-01
+    title: Organizational mission and stakeholders are determined
+    family: GV
+    checks: [{manual: true}]
+  - id: GV.PO-01
+    title: Cybersecurity risk-management strategy is established
+    family: GV
+    checks: [{manual: true}]
+
+  # --- IDENTIFY --- #
+  - id: ID.AM-01
+    title: Inventory of physical devices and systems within the organization
+    family: ID
+    severity_if_failed: medium
+    checks:
+      - artifact_present: system
+  - id: ID.AM-02
+    title: Inventory of software platforms and applications
+    family: ID
+    severity_if_failed: medium
+    checks:
+      - artifact_present: installed_software
+      - artifact_present: python_packages
+      - artifact_present: npm_packages
+  - id: ID.RA-01
+    title: Asset vulnerabilities are identified and documented
+    family: ID
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: supply_chain
+
+  # --- PROTECT --- #
+  - id: PR.AA-01
+    title: Identities and credentials are issued, managed, verified, revoked, audited
+    family: PR
+    severity_if_failed: high
+    checks:
+      - artifact_present: users
+      - no_finding_with_detector: ssh_auth_keys
+  - id: PR.AA-05
+    title: Access permissions are managed (least privilege, separation of duties)
+    family: PR
+    severity_if_failed: high
+    checks:
+      - no_finding_with_detector: env_hijack
+  - id: PR.DS-01
+    title: Data-at-rest is protected
+    family: PR
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: PR.PS-01
+    title: Configuration management practices established
+    family: PR
+    severity_if_failed: medium
+    checks:
+      - no_finding_with_detector: persistence_outlier
+
+  # --- DETECT --- #
+  - id: DE.AE-02
+    title: Detected events are analyzed to understand attack targets and methods
+    family: DE
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - artifact_present: network
+  - id: DE.CM-01
+    title: The network is monitored to detect potential cybersecurity events
+    family: DE
+    severity_if_failed: high
+    checks:
+      - artifact_present: network
+  - id: DE.CM-09
+    title: Computing hardware and software is monitored to detect potential events
+    family: DE
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+      - no_finding_with_detector: c2
+
+  # --- RESPOND --- #
+  - id: RS.MA-01
+    title: Incident response plan is executed during or after an incident
+    family: RS
+    severity_if_failed: high
+    checks: [{manual: true}]
+  - id: RS.AN-01
+    title: Notifications from detection systems are investigated
+    family: RS
+    severity_if_failed: high
+    checks:
+      - artifact_present: processes
+
+  # --- RECOVER --- #
+  - id: RC.RP-01
+    title: The recovery plan is executed during or after a cybersecurity incident
+    family: RC
+    severity_if_failed: high
+    checks: [{manual: true}]
