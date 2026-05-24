@@ -53,6 +53,13 @@ trap 'git checkout -q "$start_branch" 2>/dev/null || true' EXIT INT TERM
 staging=$(mktemp -d -t ghpages.XXXXXX)
 rsync -a --delete docs/ "$staging/" >/dev/null
 
+# Capture the source docs/ tree-sha now so the gh-pages commit stamps
+# its origin. The pre-push auto-sync hook (install-hooks.sh) reads the
+# stamped tree-sha back to decide whether anything actually changed
+# since the last sync.
+src_tree_sha=$(git ls-tree -d "$start_branch" docs | awk '{print $3}')
+src_commit_sha=$(git log -1 --format=%h --abbrev=10 "$start_branch")
+
 echo "  → switching to gh-pages"
 if git show-ref --verify -q refs/heads/gh-pages; then
     git checkout -q gh-pages
@@ -88,7 +95,11 @@ if git diff --cached --quiet; then
     rm -rf "$staging"
     exit 0
 fi
-TZ=UTC git commit -q -m "gh-pages: sync from docs/ @ $(git -C "$staging/.." log -1 --format=%h --abbrev=10 "$start_branch" 2>/dev/null || echo unknown)"
+TZ=UTC git commit -q -m "gh-pages: sync from docs/ @ ${src_commit_sha}
+
+docs-tree: ${src_tree_sha}
+source-commit: ${src_commit_sha}
+"
 echo "  ✓ commit on gh-pages: $(git log -1 --format='%h  %s')"
 
 rm -rf "$staging"
