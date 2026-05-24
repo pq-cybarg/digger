@@ -73,6 +73,8 @@ def _tags(finding: dict) -> list[str]:
         "exfiltration":         ["attack.exfiltration"],
         "impact":               ["attack.impact"],
         "collection":           ["attack.collection"],
+        "nightmare_eclipse":    ["attack.privilege_escalation", "attack.defense_evasion",
+                                  "attack.command_and_control"],
         "threat_actor":         ["attack.execution"],
         "env_hijack":           ["attack.privilege_escalation", "attack.defense_evasion"],
         "persistence_outlier": ["attack.persistence"],
@@ -984,6 +986,52 @@ _GENERATORS = {
     "c2":                   _gen_c2,
     "shai_hulud":           _gen_shai_hulud,
     "trapdoor":             _gen_trapdoor,
+    "nightmare_eclipse":    lambda f, *, case_id: {
+        "title": f["title"],
+        "description": f["summary"] +
+                        f"\n\nAuto-generated from digger finding {f['finding_uuid']}.",
+        **_shared(f, case_id=case_id, level=f.get("severity") or "critical"),
+        "logsource": (
+            {"category": "file_event"}
+            if (f.get("evidence") or {}).get("kind") in ("filename", "hash")
+                and (f.get("evidence") or {}).get("path")
+            else {"category": "network_connection"}
+            if (f.get("evidence") or {}).get("kind") == "c2"
+                and (f.get("evidence") or {}).get("remote_ip")
+            else {"category": "process_creation"}
+        ),
+        "detection": {
+            "selection": (
+                {"TargetFilename|endswith":
+                      "\\" + ((f.get("evidence") or {}).get("basename") or "")}
+                if (f.get("evidence") or {}).get("kind") == "filename"
+                else {"Hashes|contains":
+                          (f.get("evidence") or {}).get("hash") or ""}
+                if (f.get("evidence") or {}).get("kind") == "hash"
+                else {"DestinationIp":
+                          (f.get("evidence") or {}).get("remote_ip") or ""}
+                if (f.get("evidence") or {}).get("kind") == "c2"
+                    and (f.get("evidence") or {}).get("remote_ip")
+                else {"CommandLine|contains":
+                          (f.get("evidence") or {}).get("domain") or ""}
+                if (f.get("evidence") or {}).get("kind") == "c2"
+                    and (f.get("evidence") or {}).get("domain")
+                else {"CommandLine|contains":
+                          (f.get("evidence") or {}).get("quarantine_name") or ""}
+                if (f.get("evidence") or {}).get("kind") == "defender_quarantine"
+                else {"CommandLine|re":
+                          r"agent\.exe\s+-server\s+\S+:443\s+-hide"}
+                if (f.get("evidence") or {}).get("signature") == "beigeburrow_tunnel"
+                else {"CommandLine|contains":
+                          (f.get("evidence") or {}).get("exploit") or ""}
+            ),
+            "condition": "selection",
+        },
+        "tags": [
+            "attack.privilege_escalation", "attack.defense_evasion",
+            "attack.t1068", "attack.t1562.001", "attack.t1572",
+        ],
+    },
     "collection":           lambda f, *, case_id: {
         "title": f["title"],
         "description": f["summary"] +
