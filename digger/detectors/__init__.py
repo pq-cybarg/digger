@@ -38,6 +38,7 @@ def all_detectors() -> list[Detector]:
     from digger.detectors.nightmare_eclipse import NightmareEclipseDetector
     from digger.detectors.telemetry_jammer import TelemetryJammerDetector
     from digger.detectors.warbird_blocker import WarbirdBlockerDetector
+    from digger.detectors.macos_telemetry_jammer import MacOSTelemetryJammerDetector
     from digger.detectors.timeline import TimelineBuilder
     from digger.loki.detector import LokiStyleDetector
     from digger.memory.detector import MemoryAnomalyDetector
@@ -75,6 +76,7 @@ def all_detectors() -> list[Detector]:
         NightmareEclipseDetector(),
         TelemetryJammerDetector(),
         WarbirdBlockerDetector(),
+        MacOSTelemetryJammerDetector(),
         LokiStyleDetector(),
         MemoryAnomalyDetector(),
         UnsignedBinaryDetector(),
