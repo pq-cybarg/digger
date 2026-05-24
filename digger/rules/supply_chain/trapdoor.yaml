@@ -1,0 +1,170 @@
+# TrapDoor crypto-stealer supply-chain campaign.
+#
+# Disclosed: 2026-05-24 by Socket Security
+#   https://socket.dev/blog/trapdoor-crypto-stealer-npm-pypi-crates
+#
+# Attribution: GitHub account ``ddjidd564`` (Socket published; no
+# nation-state or established threat-group attribution at time of
+# disclosure).
+#
+# Campaign: 34 malicious packages across npm (21), PyPI (7),
+# crates.io (6). Targets crypto / DeFi / AI / security developers.
+# Exfil targets include: SSH keys, Sui/Solana/Aptos wallet data, AWS
+# credentials, GitHub tokens, browser profiles + login databases,
+# crypto wallet extensions, env vars, API keys.
+#
+# Persistence: drops payload references into developer-host files
+# that survive reboot — .cursorrules, CLAUDE.md, git hooks, shell
+# hooks, systemd user units, cron, plus SSH-based propagation to
+# adjacent hosts via authorized_keys reuse.
+#
+# Detection bypass: average 5m 56s before flagged; fastest 58s.
+# Treat all matched versions as compromised regardless of release
+# date; the campaign re-publishes under existing version numbers.
+
+# live-first-ok: Socket Security publishes this corpus on their blog,
+# not as a machine-readable live feed. If they expose a STIX / OSV
+# endpoint later, switch to load_intel() with this file as fallback
+# per digger's live-first convention.
+
+source: "socket.dev"
+disclosed: "2026-05-24"
+campaign: "TrapDoor"
+attribution:
+  github_account: "ddjidd564"
+
+# Exact package@version pairs. Any version of these packages is
+# considered compromised — TrapDoor re-publishes existing versions.
+# Format: "name@*" means every version.
+
+npm:
+  - "async-pipeline-builder@*"
+  - "build-scripts-utils@*"
+  - "chain-key-validator@*"
+  - "crypto-credential-scanner@*"
+  - "defi-env-auditor@*"
+  - "defi-threat-scanner@*"
+  - "deployment-key-auditor@*"
+  - "dev-env-bootstrapper@*"
+  - "eth-wallet-sentinel@*"
+  - "llm-context-compressor@*"
+  - "mnemonic-safety-check@*"
+  - "model-switch-router@*"
+  - "node-setup-helpers@*"
+  - "project-init-tools@*"
+  - "prompt-engineering-toolkit@*"
+  - "solidity-deploy-guard@*"
+  - "token-usage-tracker@*"
+  - "wallet-backup-verifier@*"
+  - "wallet-security-checker@*"
+  - "web3-secrets-detector@*"
+  - "workspace-config-loader@*"
+
+pypi:
+  - "cryptowallet-safety@*"
+  - "data-pipeline-check@*"
+  - "defi-risk-scanner@*"
+  - "env-loader-cli@*"
+  - "eth-security-auditor@*"   # earliest: 0.1.0 (2026-05-22 20:20:18 UTC)
+  - "git-config-sync@*"
+  - "solidity-build-guard@*"
+
+crates:
+  - "move-analyzer-build@*"
+  - "move-compiler-tools@*"
+  - "move-project-builder@*"
+  - "sui-framework-helpers@*"
+  - "sui-move-build-helper@*"
+  - "sui-sdk-build-utils@*"
+
+# Behavioral markers — high-signal strings that appear in the
+# TrapDoor payload regardless of which package was the vector.
+# The payload itself is ``trap-core.js``, 1,149 lines / 48,485 bytes,
+# shared across all npm packages. PyPI variants ``node -e`` it after
+# downloading from the GitHub-Pages domain. crates.io variants embed
+# similar logic in ``build.rs``.
+
+trap_core_filename: "trap-core.js"
+
+campaign_markers:
+  # Single-hit-fires — dispositive of TrapDoor when found in any
+  # source file, build script, or process cmdline.
+  - "P-2024-001"
+  - "trap-core.js"
+  - "ddjidd564.github.io"
+  - "cargo-build-helper-2026"   # XOR key used by the crates.io variants
+
+exfil_domains:
+  - "ddjidd564.github.io"
+  - "ddjidd564.github.io/defi-security-best-practices/"
+
+# Persistence-file markers — files TrapDoor writes itself into.
+# A clean ``.cursorrules`` or ``CLAUDE.md`` is not a TrapDoor IOC by
+# itself (they're normal dev files), but if their CONTENT contains
+# any of ``campaign_markers`` above, that's a confirmed compromise.
+persistence_files:
+  - ".cursorrules"
+  - "CLAUDE.md"
+  - ".git/hooks/pre-commit"
+  - ".git/hooks/post-commit"
+  - ".git/hooks/post-merge"
+  - ".zshrc"
+  - ".bashrc"
+  - "~/.config/systemd/user/"
+  - "/etc/cron.d/"
+  - "~/.ssh/authorized_keys"
+
+# Mitigation guidance — copy-pasteable per-ecosystem commands.
+# Every command routes through digger.ethics.contract.redact_dangerous_command
+# before being shown so destructive ops are flagged.
+
+mitigation:
+  npm: |
+    # 1. Identify the project(s) using the package:
+    grep -rn '"<PACKAGE>":' . --include=package.json --include=package-lock.json --include=yarn.lock --include=pnpm-lock.yaml
+    # 2. Remove and clear caches:
+    npm uninstall <PACKAGE>
+    rm -rf node_modules package-lock.json
+    npm cache clean --force
+    npm install
+    # 3. Rotate every secret the dev environment exposed:
+    #    - NPM_TOKEN (in .npmrc / env)
+    #    - GITHUB_TOKEN (personal access + Actions OIDC)
+    #    - AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+    #    - Any wallet seed phrases or .env files in scope
+    # 4. Check for persistence:
+    grep -l 'trap-core.js\|P-2024-001\|ddjidd564.github.io' \
+        ~/.cursorrules ~/CLAUDE.md ~/.bashrc ~/.zshrc 2>/dev/null
+    # 5. Audit git hooks in every cloned repo:
+    find ~ -name 'pre-commit' -o -name 'post-commit' -o -name 'post-merge' 2>/dev/null \
+        | xargs grep -l 'trap-core\|ddjidd564' 2>/dev/null
+  pypi: |
+    # 1. Find the venv(s):
+    pip show <PACKAGE> 2>/dev/null
+    # 2. Uninstall:
+    pip uninstall -y <PACKAGE>
+    # 3. Audit other Python projects:
+    grep -rn '<PACKAGE>' --include=requirements*.txt --include=pyproject.toml \
+                          --include=Pipfile --include=setup.py
+    # 4. Rotate the same credential set as npm above (TrapDoor uses
+    #    one payload across ecosystems).
+    # 5. Check for ``node -e`` invocations spawned by Python — the
+    #    PyPI variant downloads JS from the GH-Pages domain and runs
+    #    it via Node:
+    grep -rn 'node -e' ~/.cache/pip/ 2>/dev/null
+  crates: |
+    # 1. Cargo.lock / Cargo.toml audit:
+    grep -rn '<PACKAGE>' --include=Cargo.lock --include=Cargo.toml
+    # 2. Remove + rebuild from clean lockfile:
+    cargo remove <PACKAGE>
+    cargo clean
+    cargo build
+    # 3. Check for malicious build.rs left behind by past compiles:
+    find ~/.cargo/registry/src -name 'build.rs' 2>/dev/null \
+        | xargs grep -l 'cargo-build-helper-2026\|trap-core' 2>/dev/null
+    # 4. Same credential-rotation set as npm/pypi.
+
+# References
+
+references:
+  - "https://socket.dev/blog/trapdoor-crypto-stealer-npm-pypi-crates"

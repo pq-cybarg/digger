@@ -45,7 +45,7 @@
 <tbody>
 <tr><td><code>digger/core/</code></td><td>Evidence store, base Collector class, runner, hashing, platform detection</td><td>SQLite</td></tr>
 <tr><td><code>digger/collectors/</code></td><td>~30 platform-aware artifact collectors</td><td>OS APIs (psutil), CLI tools, plist/registry</td></tr>
-<tr><td><code>digger/detectors/</code></td><td>28 detectors over artifacts: behavioral, YARA, IOC, Sigma, C2, supply-chain, threat-actor, service-version CVE, plus 9 <a href="decepticon-counter.html">Decepticon countermeasures</a>, timeline</td><td>Evidence store, <code>digger/rules/</code>, <code>digger/intel/</code></td></tr>
+<tr><td><code>digger/detectors/</code></td><td>30 detectors over artifacts: behavioral, YARA, IOC, Sigma, C2, supply-chain, threat-actor, service-version CVE, plus 9 <a href="decepticon-counter.html">Decepticon countermeasures</a>, timeline</td><td>Evidence store, <code>digger/rules/</code>, <code>digger/intel/</code></td></tr>
 <tr><td><code>digger/firewall/</code></td><td>Unified pf / nftables / iptables / ufw / firewalld / WFP audit + remediation</td><td>Evidence store, <code>digger.ethics.contract</code></td></tr>
 <tr><td><code>digger/ethics/</code></td><td>Codified ethical contract (10 principles, programmatically enforced) + pre-engagement scope attestation</td><td>Used by every state-modifying feature</td></tr>
 <tr><td><code>digger/intel/</code></td><td>15 live threat-intel feeds + background scheduler + composite multi-URL fetchers (NVD, SigmaHQ, MITRE ATT&amp;CK STIX)</td><td>HTTP (CISA, abuse.ch, Spamhaus, GitHub, OpenSSF, NVD, mitre-attack, sigmahq, …)</td></tr>
