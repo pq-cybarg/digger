@@ -657,6 +657,91 @@ def cmd_art_coverage(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fa_update(args: argparse.Namespace) -> int:
+    from digger.forensic_artifacts import cache_dir, update_corpus
+    dest = Path(args.target).expanduser() if args.target else cache_dir()
+    print(f"[fa] cloning / updating into {dest}", file=sys.stderr)
+    r = update_corpus(dest=dest)
+    if r["stdout"]:
+        print(r["stdout"], file=sys.stderr)
+    if r["returncode"] != 0:
+        print(f"git failed (rc={r['returncode']}): {r['stderr']}",
+              file=sys.stderr)
+        return r["returncode"] or 1
+    print(f"[fa] OK · cache at {r['dest']}", file=sys.stderr)
+    return 0
+
+
+def cmd_fa_list(args: argparse.Namespace) -> int:
+    from digger.forensic_artifacts import load_artifacts
+    arts = load_artifacts()
+    if not arts:
+        print("no ForensicArtifacts loaded — run `digger fa update`",
+              file=sys.stderr)
+        return 1
+    if args.os:
+        wanted_os = args.os.lower()
+        arts = [a for a in arts if a.supports(wanted_os)]
+    if args.tags:
+        tags = [t.strip() for t in args.tags.split(",") if t.strip()]
+        arts = [a for a in arts if a.matches_tags(tags)]
+    for a in arts[: args.limit or len(arts)]:
+        os_list = ",".join(a.supported_os) or "all"
+        labels = ",".join(a.labels) or "-"
+        print(f"  {a.name:42s} [{os_list:18s}] {labels}")
+    print(f"\n({len(arts)} artifacts shown)", file=sys.stderr)
+    return 0
+
+
+def cmd_fa_run(args: argparse.Namespace) -> int:
+    from digger.forensic_artifacts import (
+        ArtifactResolver, load_artifacts, run_artifact,
+    )
+    arts = load_artifacts()
+    if not arts:
+        print("no ForensicArtifacts loaded — run `digger fa update`",
+              file=sys.stderr)
+        return 1
+    name_map = {a.name: a for a in arts}
+
+    chosen: list = []
+    if args.name:
+        for n in args.name.split(","):
+            n = n.strip()
+            if n in name_map:
+                chosen.append(name_map[n])
+            else:
+                print(f"unknown artifact: {n}", file=sys.stderr)
+                return 2
+    elif args.tags:
+        tags = [t.strip() for t in args.tags.split(",") if t.strip()]
+        chosen = [a for a in arts if a.matches_tags(tags)]
+    else:
+        print("provide --name NAME[,NAME...] or --tags TAG[,TAG...]",
+              file=sys.stderr)
+        return 2
+
+    if not chosen:
+        print("no artifacts matched", file=sys.stderr)
+        return 1
+
+    store = EvidenceStore(args.case_dir)
+    try:
+        resolver = ArtifactResolver()
+        total = 0
+        for a in chosen:
+            n = run_artifact(
+                a, store, resolver=resolver,
+                all_artifacts_by_name=name_map,
+            )
+            total += n
+            print(f"  [{a.name:40s}] {n} digger-artifacts emitted")
+        print(f"\ndone. {total} artifacts total.")
+    finally:
+        store.close()
+    return 0
+
+
 def cmd_query(args: argparse.Namespace) -> int:
     from digger.query import (
         QueryError, list_canned, run_canned, run_query,
@@ -1144,6 +1229,43 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--format", default="html", help="json|md|html")
     pr.add_argument("--out", help="Output file path")
     pr.set_defaults(func=cmd_report)
+
+    pfa = sub.add_parser(
+        "fa",
+        help="ForensicArtifacts knowledge base — Google/DFIR-community "
+             "YAML library of forensic-artifact definitions",
+    )
+    fa_sub = pfa.add_subparsers(dest="fa_cmd", required=True)
+
+    pfau = fa_sub.add_parser(
+        "update",
+        help="Clone or fast-forward ForensicArtifacts/artifacts into the cache",
+    )
+    pfau.add_argument(
+        "--target",
+        help="Where to place the corpus (default: ~/.cache/digger/forensic-artifacts)",
+    )
+    pfau.set_defaults(func=cmd_fa_update)
+
+    pfal = fa_sub.add_parser(
+        "list",
+        help="List loaded artifact definitions, filterable by --os / --tags",
+    )
+    pfal.add_argument("--os", help="Filter by supported OS (linux/darwin/windows)")
+    pfal.add_argument("--tags", help="Comma-separated label match (any-of)")
+    pfal.add_argument("--limit", type=int, help="Show only the first N")
+    pfal.set_defaults(func=cmd_fa_list)
+
+    pfar = fa_sub.add_parser(
+        "run",
+        help="Execute one or more artifacts; emit digger Artifacts to the case",
+    )
+    _add_case_arg(pfar)
+    pfar.add_argument("--name",
+                      help="Comma-separated artifact name(s) to run")
+    pfar.add_argument("--tags",
+                      help="Comma-separated tag match (alternative to --name)")
+    pfar.set_defaults(func=cmd_fa_run)
 
     pq = sub.add_parser(
         "query",
