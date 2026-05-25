@@ -657,6 +657,62 @@ def cmd_art_coverage(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_plaso_info(args: argparse.Namespace) -> int:
+    from digger.plaso import PlasoError, discover_binary, info
+    binary = discover_binary()
+    if not binary:
+        print("no psort/psteal/log2timeline binary in PATH "
+              "(install via `pip install plaso`)",
+              file=sys.stderr)
+        return 1
+    print(f"[plaso] binary: {binary}")
+    try:
+        summary = info(args.plaso, binary=binary,
+                       limit=int(args.limit))
+    except PlasoError as exc:
+        print(f"plaso error: {exc}", file=sys.stderr)
+        return 2
+    print(f"[plaso] sampled {summary.events_total} events "
+          f"({summary.elapsed_s:.1f}s)")
+    print(f"\nTop parsers:")
+    for parser, n in sorted(summary.parsers_seen.items(),
+                              key=lambda kv: -kv[1])[:20]:
+        print(f"  {parser:32s} {n:>6}")
+    print(f"\nTop data types:")
+    for dt, n in sorted(summary.data_types_seen.items(),
+                          key=lambda kv: -kv[1])[:20]:
+        print(f"  {dt:48s} {n:>6}")
+    return 0
+
+
+def cmd_plaso_ingest(args: argparse.Namespace) -> int:
+    from digger.plaso import PlasoError, ingest
+    store = EvidenceStore(args.case_dir)
+    try:
+        parsers = (args.parsers.split(",") if args.parsers else None)
+        data_types = (args.data_types.split(",")
+                       if args.data_types else None)
+        try:
+            summary = ingest(
+                args.plaso, store,
+                parsers=parsers,
+                data_types=data_types,
+                after_ts=float(args.after) if args.after else None,
+                before_ts=float(args.before) if args.before else None,
+                limit=int(args.limit) if args.limit else None,
+            )
+        except PlasoError as exc:
+            print(f"plaso error: {exc}", file=sys.stderr)
+            return 2
+        print(f"[plaso] events: {summary.events_total} total, "
+              f"{summary.events_emitted} emitted, "
+              f"{summary.events_filtered} filtered out")
+        print(f"[plaso] elapsed: {summary.elapsed_s:.1f}s")
+    finally:
+        store.close()
+    return 0
+
+
 def cmd_hindsight_scan(args: argparse.Namespace) -> int:
     from digger.hindsight import (
         DEFAULT_INCLUDE, HindsightError, SUPPORTED_INCLUDE, run_scan,
@@ -1332,6 +1388,39 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--format", default="html", help="json|md|html")
     pr.add_argument("--out", help="Output file path")
     pr.set_defaults(func=cmd_report)
+
+    pp = sub.add_parser(
+        "plaso",
+        help="Plaso (log2timeline) .plaso storage-file ingestion "
+             "(requires psort/psteal binary)",
+    )
+    p_sub = pp.add_subparsers(dest="plaso_cmd", required=True)
+
+    ppi = p_sub.add_parser(
+        "info",
+        help="Sample a .plaso file and report parsers + data_types seen",
+    )
+    ppi.add_argument("--plaso", required=True, help="Path to .plaso file")
+    ppi.add_argument("--limit", default=5000,
+                     help="Number of events to sample (default 5000)")
+    ppi.set_defaults(func=cmd_plaso_info)
+
+    ppn = p_sub.add_parser(
+        "ingest",
+        help="Ingest a .plaso file: emit one Artifact per event",
+    )
+    _add_case_arg(ppn)
+    ppn.add_argument("--plaso", required=True, help="Path to .plaso file")
+    ppn.add_argument("--parsers",
+                     help="Comma-separated parser names to keep "
+                          "(e.g. winreg,chrome_history)")
+    ppn.add_argument("--data-types",
+                     help="Comma-separated data_type strings to keep")
+    ppn.add_argument("--after", help="Keep events with ts >= this (epoch s)")
+    ppn.add_argument("--before", help="Keep events with ts <= this (epoch s)")
+    ppn.add_argument("--limit",
+                     help="Maximum events to emit (no limit by default)")
+    ppn.set_defaults(func=cmd_plaso_ingest)
 
     phs = sub.add_parser(
         "hindsight",
