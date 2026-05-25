@@ -628,6 +628,27 @@ def cmd_art_coverage(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_storyline(args: argparse.Namespace) -> int:
+    from digger.report.storyline import (
+        build_storylines, render_storyline_text, render_storyline_markdown,
+        storylines_to_json,
+    )
+    import json as _json
+    store = EvidenceStore(args.case_dir)
+    try:
+        storylines = build_storylines(store=store)
+    finally:
+        store.close()
+    fmt = (args.format or "text").lower()
+    if fmt == "json":
+        print(_json.dumps(storylines_to_json(storylines), indent=2, default=str))
+    elif fmt in ("md", "markdown"):
+        print(render_storyline_markdown(storylines, top_n=args.top))
+    else:
+        print(render_storyline_text(storylines, top_n=args.top))
+    return 0
+
+
 def cmd_generate_heatmap(args: argparse.Namespace) -> int:
     from digger.genrule.heatmap import (
         build_coverage, render_html, render_json, render_text, write_heatmap,
@@ -1042,6 +1063,16 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--format", default="html", help="json|md|html")
     pr.add_argument("--out", help="Output file path")
     pr.set_defaults(func=cmd_report)
+
+    pst = sub.add_parser(
+        "storyline",
+        help="Reconstruct event chains from findings (Aftermath-style narrative)",
+    )
+    _add_case_arg(pst)
+    pst.add_argument("--format", default="text", help="text|markdown|json")
+    pst.add_argument("--top", type=int, default=10,
+                     help="Limit to top N storylines (default 10)")
+    pst.set_defaults(func=cmd_storyline)
 
     pi = sub.add_parser("investigate", help="collect + scan + triage + report")
     _add_case_arg(pi)
