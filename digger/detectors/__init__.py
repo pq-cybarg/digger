@@ -42,6 +42,7 @@ def all_detectors() -> list[Detector]:
     from digger.detectors.linux_telemetry_jammer import LinuxTelemetryJammerDetector
     from digger.detectors.browser_telemetry_jammer import BrowserTelemetryJammerDetector
     from digger.detectors.mini_shai_hulud import MiniShaiHuludDetector
+    from digger.detectors.shai_hulud_blocker import ShaiHuludBlockerDetector
     from digger.detectors.timeline import TimelineBuilder
     from digger.loki.detector import LokiStyleDetector
     from digger.memory.detector import MemoryAnomalyDetector
@@ -83,6 +84,7 @@ def all_detectors() -> list[Detector]:
         LinuxTelemetryJammerDetector(),
         BrowserTelemetryJammerDetector(),
         MiniShaiHuludDetector(),
+        ShaiHuludBlockerDetector(),
         LokiStyleDetector(),
         MemoryAnomalyDetector(),
         UnsignedBinaryDetector(),
