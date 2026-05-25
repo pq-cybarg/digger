@@ -657,6 +657,40 @@ def cmd_art_coverage(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_query(args: argparse.Namespace) -> int:
+    from digger.query import (
+        QueryError, list_canned, run_canned, run_query,
+    )
+    if args.list_canned:
+        for name, desc in list_canned():
+            print(f"  {name:30s} {desc}")
+        return 0
+    if not args.case_dir:
+        print("--case-dir required", file=sys.stderr)
+        return 2
+    try:
+        if args.canned:
+            result = run_canned(args.canned, args.case_dir)
+        elif args.sql:
+            result = run_query(args.sql, args.case_dir, limit=args.limit)
+        else:
+            print("provide either --canned NAME, --list-canned, "
+                  "or 'SELECT ...' as positional sql",
+                  file=sys.stderr)
+            return 2
+    except QueryError as exc:
+        print(f"query error: {exc}", file=sys.stderr)
+        return 2
+    fmt = (args.format or "text").lower()
+    if fmt == "json":
+        print(result.to_json())
+    elif fmt == "csv":
+        print(result.to_csv(), end="")
+    else:
+        print(result.to_text())
+    return 0
+
+
 def cmd_watch(args: argparse.Namespace) -> int:
     from digger.watch import run_watch
     interval = float(args.interval)
@@ -1110,6 +1144,23 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--format", default="html", help="json|md|html")
     pr.add_argument("--out", help="Output file path")
     pr.set_defaults(func=cmd_report)
+
+    pq = sub.add_parser(
+        "query",
+        help="Run a read-only SELECT against the case evidence.db "
+             "(VQL-style ad-hoc query)",
+    )
+    pq.add_argument("sql", nargs="?",
+                    help="SQL: SELECT ... FROM findings WHERE ...")
+    pq.add_argument("--case-dir", help="Case directory (evidence.db)")
+    pq.add_argument("--canned", help="Run a named pre-canned query")
+    pq.add_argument("--list-canned", action="store_true",
+                    help="List available canned queries and exit")
+    pq.add_argument("--format", default="text",
+                    help="Output format: text | json | csv (default text)")
+    pq.add_argument("--limit", type=int,
+                    help="Add a LIMIT clause when none is present")
+    pq.set_defaults(func=cmd_query)
 
     pw = sub.add_parser(
         "watch",
