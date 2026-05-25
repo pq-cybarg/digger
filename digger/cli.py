@@ -657,6 +657,57 @@ def cmd_art_coverage(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_falco_ingest(args: argparse.Namespace) -> int:
+    from digger.falco import FalcoError, ingest_file
+    store = EvidenceStore(args.case_dir)
+    try:
+        prio = (args.priorities.split(",") if args.priorities else None)
+        rules = (args.rules.split(",") if args.rules else None)
+        try:
+            summary = ingest_file(
+                args.log, store,
+                priorities=prio, rules=rules,
+                after_ts=float(args.after) if args.after else None,
+                before_ts=float(args.before) if args.before else None,
+                limit=int(args.limit) if args.limit else None,
+            )
+        except FalcoError as exc:
+            print(f"falco error: {exc}", file=sys.stderr)
+            return 2
+        print(f"[falco] events: {summary.events_total} total, "
+              f"{summary.events_emitted} emitted, "
+              f"{summary.events_skipped} skipped")
+        print(f"[falco] elapsed: {summary.elapsed_s:.1f}s")
+        if args.verbose and summary.rules_seen:
+            print("\nTop rules:")
+            for rule, n in sorted(summary.rules_seen.items(),
+                                    key=lambda kv: -kv[1])[:20]:
+                print(f"  {rule:48s} {n:>5}")
+    finally:
+        store.close()
+    return 0
+
+
+def cmd_falco_stream(args: argparse.Namespace) -> int:
+    from digger.falco import FalcoError, stream_events
+    store = EvidenceStore(args.case_dir)
+    try:
+        try:
+            summary = stream_events(
+                store,
+                max_events=int(args.max_events) if args.max_events else None,
+            )
+        except FalcoError as exc:
+            print(f"falco error: {exc}", file=sys.stderr)
+            return 2
+        print(f"[falco] streamed {summary.events_emitted} events "
+              f"({summary.events_skipped} skipped, "
+              f"{summary.elapsed_s:.1f}s)")
+    finally:
+        store.close()
+    return 0
+
+
 def cmd_plaso_info(args: argparse.Namespace) -> int:
     from digger.plaso import PlasoError, discover_binary, info
     binary = discover_binary()
@@ -1388,6 +1439,46 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--format", default="html", help="json|md|html")
     pr.add_argument("--out", help="Output file path")
     pr.set_defaults(func=cmd_report)
+
+    pf = sub.add_parser(
+        "falco",
+        help="Falco runtime-security bridge: ingest a Falco NDJSON "
+             "event log (any OS) or live-stream from a running falco "
+             "(Linux only)",
+    )
+    f_sub = pf.add_subparsers(dest="falco_cmd", required=True)
+
+    pfi = f_sub.add_parser(
+        "ingest",
+        help="Parse a Falco JSON-output event log file (NDJSON, "
+             "one event per line)",
+    )
+    _add_case_arg(pfi)
+    pfi.add_argument("--log", required=True,
+                     help="Path to Falco NDJSON event log")
+    pfi.add_argument("--priorities",
+                     help="Comma-separated priorities to keep "
+                          "(emergency,alert,critical,error,warning,"
+                          "notice,info,debug)")
+    pfi.add_argument("--rules",
+                     help="Comma-separated rule names to keep")
+    pfi.add_argument("--after", help="Keep events with ts >= epoch_s")
+    pfi.add_argument("--before", help="Keep events with ts <= epoch_s")
+    pfi.add_argument("--limit",
+                     help="Cap total emitted events")
+    pfi.add_argument("--verbose", "-v", action="store_true")
+    pfi.set_defaults(func=cmd_falco_ingest)
+
+    pfs = f_sub.add_parser(
+        "stream",
+        help="Linux only: spawn `falco` and pipe live JSON events "
+             "into the case",
+    )
+    _add_case_arg(pfs)
+    pfs.add_argument("--max-events",
+                     help="Stop after this many events (default: until "
+                          "falco exits or SIGTERM)")
+    pfs.set_defaults(func=cmd_falco_stream)
 
     pp = sub.add_parser(
         "plaso",
