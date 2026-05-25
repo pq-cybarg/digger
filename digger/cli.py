@@ -628,6 +628,24 @@ def cmd_art_coverage(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_watch(args: argparse.Namespace) -> int:
+    from digger.watch import run_watch
+    interval = float(args.interval)
+    only_c = args.only_collectors.split(",") if args.only_collectors else None
+    only_d = args.only_detectors.split(",") if args.only_detectors else None
+    alert = args.alert_on.split(",") if args.alert_on else None
+    return run_watch(
+        case_dir=args.case_dir,
+        interval_s=interval,
+        only_collectors=only_c,
+        only_detectors=only_d,
+        alert_on=alert,
+        webhook_url=args.webhook,
+        verbose=args.verbose,
+        include_admin=not args.no_admin,
+    )
+
+
 def cmd_storyline(args: argparse.Namespace) -> int:
     from digger.report.storyline import (
         build_storylines, render_storyline_text, render_storyline_markdown,
@@ -1063,6 +1081,29 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--format", default="html", help="json|md|html")
     pr.add_argument("--out", help="Output file path")
     pr.set_defaults(func=cmd_report)
+
+    pw = sub.add_parser(
+        "watch",
+        help="Continuous-monitoring daemon: re-collect + re-scan on a timer, "
+             "emit only new findings",
+    )
+    _add_case_arg(pw)
+    pw.add_argument("--interval", default=60,
+                    help="Seconds between cycles (default 60)")
+    pw.add_argument("--only-collectors",
+                    help="Comma-separated collector names to limit each tick")
+    pw.add_argument("--only-detectors",
+                    help="Comma-separated detector names to limit each tick")
+    pw.add_argument("--alert-on",
+                    help="Comma-separated severity names that should trip rc=2 "
+                         "on a new finding (e.g. critical,high)")
+    pw.add_argument("--webhook",
+                    help="HTTP(S) endpoint to POST new-finding batches to")
+    pw.add_argument("--verbose", "-v", action="store_true",
+                    help="Print finding evidence inline")
+    pw.add_argument("--no-admin", action="store_true",
+                    help="Skip collectors that require admin")
+    pw.set_defaults(func=cmd_watch)
 
     pst = sub.add_parser(
         "storyline",
