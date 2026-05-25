@@ -40,6 +40,7 @@ def all_detectors() -> list[Detector]:
     from digger.detectors.warbird_blocker import WarbirdBlockerDetector
     from digger.detectors.macos_telemetry_jammer import MacOSTelemetryJammerDetector
     from digger.detectors.linux_telemetry_jammer import LinuxTelemetryJammerDetector
+    from digger.detectors.browser_telemetry_jammer import BrowserTelemetryJammerDetector
     from digger.detectors.timeline import TimelineBuilder
     from digger.loki.detector import LokiStyleDetector
     from digger.memory.detector import MemoryAnomalyDetector
@@ -79,6 +80,7 @@ def all_detectors() -> list[Detector]:
         WarbirdBlockerDetector(),
         MacOSTelemetryJammerDetector(),
         LinuxTelemetryJammerDetector(),
+        BrowserTelemetryJammerDetector(),
         LokiStyleDetector(),
         MemoryAnomalyDetector(),
         UnsignedBinaryDetector(),
