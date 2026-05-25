@@ -1,0 +1,186 @@
+# Mini Shai-Hulud / TeamPCP supply-chain worm.
+#
+# Disclosed: 2026-05-11 (initial wave), 2026-05-12 (TanStack disclosure).
+# Sources (primary):
+#   https://www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised
+#   https://safedep.io/mass-npm-supply-chain-attack-tanstack-mistral/
+#   https://orca.security/resources/blog/tanstack-npm-supply-chain-worm/
+#   https://www.rescana.com/post/tanstack-npm-supply-chain-attack-detailed-analysis-of-the-may-2026-github-actions-breach-and-multi-ecosystem-impact
+#   https://digital.nhs.uk/cyber-alerts/2026/cc-4781
+#
+# Attribution: TeamPCP (high confidence; payload + infra overlap with
+# prior SAP, Checkmarx, Bitwarden, Trivy compromises). Domain message
+# signed "With Love TeamPCP". Linked to March 2026 Trivy compromise.
+#
+# Scope: 170+ npm packages, 2 PyPI packages, 404 malicious versions.
+# One of the largest coordinated registry-poisoning events of 2026
+# and the first to span both npm + PyPI in a single campaign.
+#
+# Distinctive properties:
+#   * Self-propagation via GitHub GraphQL ``createCommitOnBranch``
+#     mutation, poisoning IDE configs (.claude/, .vscode/) in
+#     downstream victim repos.
+#   * Destructive payload: ``rm -rf ~/`` triggered when the GitHub
+#     token used by gh-token-monitor.service is revoked.
+#   * Persistence: ``gh-token-monitor`` LaunchAgent (macOS) or
+#     systemd user service (Linux), polling GitHub every 60s.
+#   * Decentralized C2 via Session messenger (seed1-3.getsession.org +
+#     filev2.getsession.org), plus typosquat git-tanstack.com.
+
+# live-first-ok: Mini Shai-Hulud is a vendor-blog-published corpus;
+# no live OSV / STIX feed for it as of disclosure. CVE-style indexing
+# may follow but the per-package list lives on vendor disclosures.
+# Until then, this bundled YAML is authoritative.
+
+source: "wiz.io,safedep.io,orca.security,rescana.com,digital.nhs.uk"
+disclosed: "2026-05-11"
+campaign: "Mini Shai-Hulud"
+attribution:
+  group: "TeamPCP"
+  signature: "With Love TeamPCP"
+  prior_compromises: ["SAP", "Checkmarx", "Bitwarden", "Trivy"]
+
+# Compromised packages. Some are exact name+version (Wiz published);
+# scope-level entries are name@* because the campaign poisoned every
+# version of every package under that scope.
+
+npm:
+  # @tanstack scope — 42 packages across react / vue / solid routers
+  - "@tanstack/react-router@*"
+  - "@tanstack/vue-router@*"
+  - "@tanstack/solid-router@*"
+  - "@tanstack/react-query@*"
+  - "@tanstack/vue-query@*"
+  - "@tanstack/solid-query@*"
+  - "@tanstack/svelte-router@*"
+  - "@tanstack/svelte-query@*"
+
+  # @mistralai scope
+  - "@mistralai/mistralai@*"
+  - "@mistralai/mistralai-azure@*"
+  - "@mistralai/mistralai-gcp@*"
+
+  # @uipath scope (~70 packages, scope-wide compromise)
+  - "@uipath/*"
+
+  # @opensearch-project (high-profile, 1.3M weekly downloads)
+  - "@opensearch-project/opensearch@*"
+
+  # Other affected scopes
+  - "@squawk/*"
+  - "@tallyui/*"
+  - "@beproduct/nestjs-auth@*"
+
+pypi:
+  - "guardrails-ai@0.10.1"
+  - "mistralai@2.4.6"
+
+# Distinctive strings — single hit dispositive of Mini Shai-Hulud.
+campaign_markers:
+  - "Shai-Hulud: Here We Go Again"     # repository description text
+  - "IfYouRevokeThisTokenItWillWipeTheComputerOfTheOwner"  # commit message
+  - "With Love TeamPCP"                # domain message signature
+  - "gh-token-monitor"                 # persistence service name
+  - "tanstack_runner.js"               # runtime artifact
+  - "router_init.js"                   # runtime artifact
+  - "router_runtime.js"                # runtime artifact
+
+# File hashes published by Wiz.
+hashes:
+  - sha256: "ab4fcadaec49c03278063dd269ea5eef82d24f2124a8e15d7b90f2fa8601266c"
+    name: "router_init.js"
+    family: "Mini Shai-Hulud"
+  - sha256: "2ec78d556d696e208927cc503d48e4b5eb56b31abc2870c2ed2e98d6be27fc96"
+    name: "router_init.js (variant)"
+    family: "Mini Shai-Hulud"
+  - sha256: "2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df"
+    name: "setup.mjs (preinstall hook)"
+    family: "Mini Shai-Hulud"
+
+# Persistence files written by the dropper. Existence + content
+# co-presence with markers is dispositive.
+persistence_files:
+  - "~/Library/LaunchAgents/com.user.gh-token-monitor.plist"
+  - "~/.config/systemd/user/gh-token-monitor.service"
+
+# IDE-config files the worm writes itself into for self-propagation.
+ide_persistence_files:
+  - ".claude/settings.json"
+  - ".claude/setup.mjs"
+  - ".claude/router_runtime.js"
+  - ".vscode/tasks.json"
+  - ".vscode/setup.mjs"
+
+# C2 infrastructure
+c2:
+  domains:
+    - "git-tanstack.com"
+    - "filev2.getsession.org"
+    - "seed1.getsession.org"
+    - "seed2.getsession.org"
+    - "seed3.getsession.org"
+  ips:
+    - "83.142.209.194"
+  session_recipient_id: "05f9e609d79eed391015e11380dee4b5c9ead0b6e2e7f0134e6e51767a87323026"
+  payload_urls:
+    - "git-tanstack.com/transformers.pyz"
+    - "git-tanstack.com/tmp/transformers.pyz"
+
+# IMDS / vault probes — credential-harvest targets
+credential_probes:
+  - "169.254.169.254/latest/meta-data/iam/security-credentials/"
+  - "127.0.0.1:8200"   # local Vault
+
+mitigation:
+  npm: |
+    # 1. Pin or downgrade away from the compromised versions:
+    grep -rn '"@tanstack/\|@mistralai/\|@uipath/\|@opensearch-project/' . \
+        --include=package.json --include=package-lock.json --include=yarn.lock
+    npm uninstall '@tanstack/react-router' '@tanstack/vue-router' '@mistralai/mistralai'
+    rm -rf node_modules package-lock.json
+    npm cache clean --force
+    # 2. Rotate every token reachable from the dev environment:
+    #    - GITHUB_TOKEN, ghp_*, gho_*, ghs_*, ACTIONS_ID_TOKEN
+    #    - NPM_TOKEN
+    #    - AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (IMDS was probed)
+    #    - Vault tokens (local Vault was probed)
+    # 3. Audit IDE configs for poisoned hooks:
+    grep -rln 'gh-token-monitor\|tanstack_runner\|router_init\.js\|router_runtime\.js' \
+        ~/.vscode ~/.claude ~/ 2>/dev/null
+    # 4. Remove persistence:
+    launchctl unload ~/Library/LaunchAgents/com.user.gh-token-monitor.plist 2>/dev/null
+    rm -f ~/Library/LaunchAgents/com.user.gh-token-monitor.plist
+    systemctl --user disable --now gh-token-monitor.service 2>/dev/null
+    rm -f ~/.config/systemd/user/gh-token-monitor.service
+    # 5. Audit GitHub repos you push to for the marker commit
+    #    "IfYouRevokeThisTokenItWillWipeTheComputerOfTheOwner".
+
+  pypi: |
+    # 1. Identify the env:
+    pip show guardrails-ai mistralai 2>/dev/null
+    # 2. Uninstall + reinstall safe versions:
+    pip uninstall -y guardrails-ai mistralai
+    pip install 'guardrails-ai==0.10.0' 'mistralai==2.4.5'
+    # 3. Same credential-rotation set as npm above (TeamPCP campaign
+    #    uses one payload across ecosystems).
+    # 4. Look for transformers.pyz dropped by the PyPI variant:
+    find ~/ /tmp -name 'transformers.pyz' 2>/dev/null
+
+  destructive_warning: |
+    # CRITICAL: This campaign includes a DESTRUCTIVE payload — the
+    # gh-token-monitor.service triggers `rm -rf ~/` when it detects
+    # the harvested GitHub token has been revoked. DO NOT revoke the
+    # token until you have:
+    #   1. Disabled gh-token-monitor.service AND removed the file
+    #      (see npm mitigation step 4)
+    #   2. Confirmed no process named gh-token-monitor is running:
+    #      pgrep -f gh-token-monitor
+    #   3. Taken a backup of $HOME
+    # Then rotate the token.
+
+references:
+  - "https://www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised"
+  - "https://safedep.io/mass-npm-supply-chain-attack-tanstack-mistral/"
+  - "https://orca.security/resources/blog/tanstack-npm-supply-chain-worm/"
+  - "https://www.rescana.com/post/tanstack-npm-supply-chain-attack-detailed-analysis-of-the-may-2026-github-actions-breach-and-multi-ecosystem-impact"
+  - "https://digital.nhs.uk/cyber-alerts/2026/cc-4781"
