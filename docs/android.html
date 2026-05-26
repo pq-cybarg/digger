@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Android device forensics (adb) — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="android">
+<main>
+
+<h1>Android device forensics (adb)
+  <span class="subtitle">Strictly read-only adb collector + AndroidSecurityDetector for banking-trojan / stalkerware / commercial-spyware fingerprints.</span>
+</h1>
+
+<p>Closes digger's long-pending mobile gap. Modern Android attacks
+land via sideloaded APKs that abuse <code>BIND_ACCESSIBILITY_SERVICE</code>
+(banking trojans Anubis, Cerberus, ERMAC, SharkBot, Coper, BRATA,
+BlackRock) and <code>BIND_DEVICE_ADMIN</code> (stalkerware persistence).
+digger connects to a USB-attached or network-bridged device via adb,
+enumerates package + permission + device-policy state, and runs the
+six detection layers (A1–A6).</p>
+
+<h2>Strictly read-only</h2>
+
+<p>No APKs are pushed, no settings changed, no <code>pm install</code>
+issued. digger only invokes enumeration commands. The operator
+must enable adb-debugging and authorize the host pairing themselves
+— the forensic stance is "what the user's device sees about itself".</p>
+
+<h2>Commands invoked</h2>
+
+<ul class="kv">
+  <li><code>pm list packages -f -i -U</code> — name, code path, installer</li>
+  <li><code>pm list packages -d</code> — disabled packages</li>
+  <li><code>dumpsys package &lt;pkg&gt;</code> — granted/requested
+    permissions, install source, flags, target sdk, signers</li>
+  <li><code>dumpsys device_policy</code>, <code>dumpsys accessibility</code></li>
+  <li><code>settings get global install_non_market_apps</code></li>
+  <li><code>settings get secure enabled_accessibility_services</code></li>
+  <li><code>getprop ro.build.fingerprint</code>,
+    <code>ro.build.version.security_patch</code>,
+    <code>ro.product.model</code></li>
+</ul>
+
+<p>Graceful degradation: missing adb / no device / device offline /
+unauthorized all produce zero artifacts (no exceptions). Per-command
+timeout, 16 MiB output cap, 600-package default dump cap.</p>
+
+<h2>Detection layers (A1–A6)</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>What it catches</th><th>MITRE</th></tr></thead>
+  <tbody>
+    <tr><td>A1</td><td>medium &rarr; high</td><td>Sideloaded install. Medium for non-Play installer; high for a known stalkerware-installer (<code>com.android.fileinstall</code> etc).</td><td>T1404</td></tr>
+    <tr><td>A2</td><td>critical</td><td>AccessibilityService abuse: non-system, non-Play app holds <code>BIND_ACCESSIBILITY_SERVICE</code>. The banking-trojan signature.</td><td>T1417</td></tr>
+    <tr><td>A3</td><td>critical</td><td>Unexpected device-admin: non-system, non-Play app holds <code>BIND_DEVICE_ADMIN</code>. Lets the app block uninstall and force lock-screen passwords.</td><td>T1626</td></tr>
+    <tr><td>A4</td><td>high</td><td>Swiss-army-knife permission combo: SMS + contacts/call-log + sensor (camera/mic/location). The stalkerware fingerprint (mSpy, FlexiSpy, KidsGuard).</td><td>T1430</td></tr>
+    <tr><td>A5</td><td>medium &rarr; high</td><td>Stale Android security patch — &gt;180 days old (medium); &gt;365 days (high). Device exposed to all post-patch CVEs.</td><td>T1404</td></tr>
+    <tr><td>A6</td><td>medium</td><td><code>install_non_market_apps</code> globally enabled. Pre-Android-8 legacy toggle.</td><td>T1404</td></tr>
+  </tbody>
+</table>
+
+<h2>CLI</h2>
+
+<pre><code>$ digger android collect --case-dir /tmp/case [--serial emulator-5554] [--max-packages 600]
+
+[android] binary: /usr/local/bin/adb
+[android] devices in 'device' state: ['emulator-5554']
+[android] selected serial: emulator-5554
+[android] packages listed: 187
+[android] packages dumped: 187
+[android] artifacts emitted: 195
+[android] elapsed: 14.2s
+</code></pre>
+
+<h2>Operator note: remediation is manual</h2>
+
+<p>digger never auto-removes a malicious package or revokes a
+permission. Remediation goes to the report for the operator to
+apply via Settings → Apps or <code>adb shell pm uninstall</code>.
+Consistent with the <a href="ethics.html">P2 "no host modification
+without explicit consent"</a> gate.</p>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>
