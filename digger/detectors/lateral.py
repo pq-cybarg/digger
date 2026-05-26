@@ -208,6 +208,8 @@ class LateralMovementDetector(Detector):
             },
             "level": "high",
             "tags": ["attack.t1021", "attack.t1550", "attack.t1570",
+                    "attack.t1080", "attack.t1563", "attack.t1563.001",
+                    "attack.t1563.002",
                     "attack.lateral_movement"],
         }
 
@@ -390,3 +392,187 @@ class LateralMovementDetector(Detector):
                 # Cap one finding per event-log artifact so we don't
                 # snowball — the operator can pull full data from the raw log.
                 break
+
+        # ---- L6: taint shared content (T1080) ----
+        # An attacker drops a malicious file into a shared mount where
+        # adjacent hosts execute it. Heuristics:
+        #   - Executable / script written to an SMB / NFS / CIFS mount
+        #     path (/Volumes/<smb>, /mnt/<share>, //<server>/<share>)
+        #   - Login-script or startup-folder write in a shared
+        #     redirected-folder root (Windows: \\<server>\<share>\
+        #     Users\Default\AppData\Roaming\Microsoft\Windows\
+        #     Start Menu\Programs\Startup; Unix: a profile.d /
+        #     .bashrc on a shared NFS home)
+        # We look in recent_files for these patterns. Process-driven
+        # writes are caught via the cmdline regex below.
+        _SHARED_MOUNT_PREFIXES = (
+            "/volumes/",                    # macOS-mounted SMB
+            "/mnt/",                        # Linux NFS/CIFS convention
+            "/media/",                      # Linux removable + SMB
+            "/net/",                        # autofs
+            "\\\\",                         # Windows UNC
+        )
+        _EXEC_OR_SCRIPT_EXT = (
+            ".exe", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".jse",
+            ".hta", ".lnk", ".scr", ".msi", ".dll",
+            ".sh", ".py", ".rb", ".pl",
+        )
+        _STARTUP_PATH_FRAGMENTS = (
+            "/start menu/programs/startup/",
+            "\\start menu\\programs\\startup\\",
+            "/etc/profile.d/",
+            "/.bashrc", "/.zshrc", "/.bash_profile", "/.profile",
+            "/autostart/",
+        )
+        for art in store.iter_artifacts(collector="recent_files"):
+            d = art["data"] or {}
+            entries = d.get("entries") or ([d] if d.get("path") else [])
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                path = entry.get("path") or ""
+                if not path:
+                    continue
+                low = path.lower()
+                # Must be on a shared mount root
+                is_shared = False
+                for p in _SHARED_MOUNT_PREFIXES:
+                    if low.startswith(p):
+                        is_shared = True
+                        break
+                    stripped = p.strip("\\/").lower()
+                    # Skip the empty-stripped check (e.g. UNC "\\\\"
+                    # strips to "" which would always substring-match).
+                    if stripped and ("/" + stripped + "/") in low:
+                        is_shared = True
+                        break
+                if not is_shared:
+                    continue
+                # And either: an executable/script, OR a startup-path
+                # fragment
+                is_exec = any(low.endswith(e) for e in _EXEC_OR_SCRIPT_EXT)
+                is_startup = any(frag in low
+                                  for frag in _STARTUP_PATH_FRAGMENTS)
+                if not (is_exec or is_startup):
+                    continue
+                yield Finding(
+                    detector=self.name,
+                    severity="high",
+                    title=(
+                        f"Taint-shared-content candidate: {path} on "
+                        "shared mount"
+                    ),
+                    summary=(
+                        f"File ``{path}`` is on a shared mount path "
+                        f"(NFS / SMB / CIFS / UNC) and is either an "
+                        "executable/script or a startup-folder entry. "
+                        "Adjacent hosts mounting this share may "
+                        "execute it automatically (login script, "
+                        "startup folder, profile.d / .bashrc on a "
+                        "shared home). T1080 — lateral movement by "
+                        "tainting content the next victim auto-runs."
+                    ),
+                    artifact_refs=[art["artifact_uuid"]],
+                    evidence={
+                        "kind": "taint_shared_content",
+                        "path": path,
+                        "is_executable": is_exec,
+                        "is_startup_entry": is_startup,
+                    },
+                    mitre="T1080",
+                )
+
+        # ---- L7: SSH ControlMaster hijacking (T1563.001) ----
+        # SSH allows session multiplexing via ControlMaster. A user with
+        # access to ~/.ssh/master-* (or the configured ControlPath
+        # socket) can ride an existing authenticated session into the
+        # remote host — no password / no MFA. Detectors:
+        #   - Process cmdline using `-S <socket>` to attach to a master
+        #     socket NOT owned by the calling user
+        #   - Cmdline matching `ssh -M`/`ssh -O check`/ssh -O exit on a
+        #     socket path under another user's HOME
+        for p in procs.values():
+            cmd = p["cmdline"]
+            if not cmd or "ssh" not in cmd.lower():
+                continue
+            # Check for `-S <path>` or `ControlPath=...` socket attach
+            sock_match = re.search(
+                r"(?:^|\s)(?:-S\s+(\S+)|ControlPath[= ]\s*(\S+))",
+                cmd, re.I,
+            )
+            if not sock_match:
+                continue
+            sock_path = sock_match.group(1) or sock_match.group(2) or ""
+            # Heuristic: socket path under /tmp/, /Users/<other>/,
+            # /home/<other>/ — i.e. NOT the calling user's own ~/.ssh
+            user_home_marker = f"/{p['username']}/" if p["username"] else None
+            crosses_user = bool(user_home_marker) and (
+                user_home_marker not in sock_path
+            )
+            if not (sock_path.startswith("/tmp/") or crosses_user):
+                continue
+            yield Finding(
+                detector=self.name,
+                severity="critical",
+                title=(
+                    f"SSH ControlMaster hijack pattern in pid {p['pid']}: "
+                    f"socket {sock_path}"
+                ),
+                summary=(
+                    f"Process pid {p['pid']} ({p['name']}, user "
+                    f"{p['username']}) is attaching to an SSH "
+                    f"ControlMaster socket at ``{sock_path}`` that is "
+                    "not in the calling user's own ~/.ssh. SSH "
+                    "ControlMaster sockets carry an already-"
+                    "authenticated session — riding one bypasses "
+                    "the remote host's password / MFA. T1563.001."
+                ),
+                artifact_refs=[p["artifact_uuid"]],
+                evidence={
+                    "kind": "ssh_hijack",
+                    "pid": p["pid"],
+                    "name": p["name"],
+                    "username": p["username"],
+                    "control_socket": sock_path,
+                    "cmdline": cmd[:400],
+                },
+                mitre="T1563.001",
+            )
+
+        # ---- L8: RDP hijacking via tscon (T1563.002) ----
+        # The classic Windows pattern: running `tscon <session_id>
+        # /dest:<my_session>` as SYSTEM hijacks a logged-on user's
+        # RDP session into the caller's desk. Two markers:
+        #   - tscon.exe with a /dest: argument
+        #   - mstsc.exe or rdpclip on a SYSTEM-owned process tree
+        for p in procs.values():
+            cmd = p["cmdline"].lower()
+            base = (_basename(p["exe"]) or p["name"]).lower()
+            if base == "tscon.exe" or "tscon" in cmd:
+                if "/dest:" in cmd or "/v:" in cmd:
+                    yield Finding(
+                        detector=self.name,
+                        severity="critical",
+                        title=(
+                            f"RDP-session hijack via tscon in pid "
+                            f"{p['pid']}"
+                        ),
+                        summary=(
+                            f"Process pid {p['pid']} ({p['name']}, user "
+                            f"{p['username']}) ran tscon with a /dest "
+                            "argument — the classic Windows pattern "
+                            "for hijacking another user's logged-on "
+                            "RDP session into the caller's desk. "
+                            "Almost always requires SYSTEM privileges; "
+                            "post-foothold tradecraft. T1563.002."
+                        ),
+                        artifact_refs=[p["artifact_uuid"]],
+                        evidence={
+                            "kind": "rdp_hijack",
+                            "pid": p["pid"],
+                            "name": p["name"],
+                            "username": p["username"],
+                            "cmdline": p["cmdline"][:400],
+                        },
+                        mitre="T1563.002",
+                    )
