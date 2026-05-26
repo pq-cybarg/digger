@@ -746,6 +746,40 @@ def cmd_k8s_collect(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_idp_ingest(args: argparse.Namespace) -> int:
+    from digger.idp import IdpError, ingest_file
+    store = EvidenceStore(args.case_dir)
+    try:
+        actors = ([a.strip() for a in args.actors.split(",") if a.strip()]
+                  if args.actors else None)
+        try:
+            summary = ingest_file(
+                args.log, store,
+                provider=args.provider,
+                after_ts=float(args.after) if args.after else None,
+                before_ts=float(args.before) if args.before else None,
+                actors=actors,
+                limit=int(args.limit) if args.limit else None,
+            )
+        except IdpError as exc:
+            print(f"idp error: {exc}", file=sys.stderr)
+            return 2
+        print(f"[idp/{summary.provider}] events: "
+              f"{summary.events_total} total, "
+              f"{summary.events_emitted} emitted, "
+              f"{summary.events_skipped} skipped")
+        print(f"[idp/{summary.provider}] elapsed: "
+              f"{summary.elapsed_s:.1f}s")
+        if args.verbose and summary.by_event_type:
+            print("\nEvent-type distribution:")
+            for et, n in sorted(summary.by_event_type.items(),
+                                key=lambda kv: -kv[1])[:20]:
+                print(f"  {et:32s} {n:>6}")
+    finally:
+        store.close()
+    return 0
+
+
 def cmd_plaso_info(args: argparse.Namespace) -> int:
     from digger.plaso import PlasoError, discover_binary, info
     binary = discover_binary()
@@ -1540,6 +1574,39 @@ def build_parser() -> argparse.ArgumentParser:
     pkc.add_argument("--verbose", "-v", action="store_true",
                      help="Print per-resource item counts")
     pkc.set_defaults(func=cmd_k8s_collect)
+
+    pi = sub.add_parser(
+        "idp",
+        help="Identity-provider audit-log ingest "
+             "(Okta / Entra / Workspace). Most modern breaches start "
+             "at the IdP — ingest the audit stream and let "
+             "IdpSecurityDetector find MFA fatigue, OAuth grants, "
+             "impossible travel, password spray, federation changes.",
+    )
+    i_sub = pi.add_subparsers(dest="idp_cmd", required=True)
+
+    pii = i_sub.add_parser(
+        "ingest",
+        help="Parse an IdP audit-log file (NDJSON or JSON-array) and "
+             "emit one Artifact per event",
+    )
+    _add_case_arg(pii)
+    pii.add_argument("--log", required=True,
+                     help="Path to the IdP audit-log file")
+    pii.add_argument("--provider", required=True,
+                     choices=["okta", "entra", "azure",
+                              "workspace", "google"],
+                     help="Audit-log shape to parse")
+    pii.add_argument("--actors",
+                     help="Comma-separated actors (email/UPN) to keep")
+    pii.add_argument("--after",
+                     help="Keep events with ts >= epoch_s")
+    pii.add_argument("--before",
+                     help="Keep events with ts <= epoch_s")
+    pii.add_argument("--limit", help="Cap total emitted events")
+    pii.add_argument("--verbose", "-v", action="store_true",
+                     help="Print event-type distribution")
+    pii.set_defaults(func=cmd_idp_ingest)
 
     pp = sub.add_parser(
         "plaso",

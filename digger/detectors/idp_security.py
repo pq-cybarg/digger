@@ -1,0 +1,395 @@
+"""Identity-provider security detector.
+
+Reads the Artifacts emitted by ``digger.idp.ingest_file`` (provider-
+normalized event shape) and finds the canonical IdP-attack patterns:
+
+  I1  MFA fatigue — ≥5 MFA-denied events for the same actor within
+      a 10-minute window. Push-bombing pattern; if any later MFA
+      succeeded for the same actor in the next 30 min, escalate
+      to critical.
+
+  I2  Suspicious OAuth consent grant — any ``oauth_grant`` event.
+      Per-event; the grant is the privilege increase. Severity high
+      because most consent grants ARE legitimate; operator triages
+      whether the granted app/scope is expected.
+
+  I3  Admin role / privilege grant — ``admin_grant`` events.
+      Always worth surfacing; severity high. Pair with the actor's
+      auth history for context.
+
+  I4  Impossible-travel sign-in — two auth events for the same
+      actor with country mismatch within a window short enough that
+      no real travel could bridge them (default 1 hour). Critical.
+
+  I5  Password-spray pattern — ≥10 failed auths from one src_ip
+      targeting >=5 distinct actors within a 10-minute window.
+      Critical.
+
+  I6  Federation / IdP-config change — ``federation_change`` events.
+      Rare; high severity. A new federated IdP / authentication
+      domain is a textbook persistence mechanism (the Mandiant
+      "Storm-0539" / "Storm-0558" playbook).
+
+MITRE: T1110.003 (Password Spraying), T1098.005 (Device
+Registration), T1556.007 (Hybrid Identity), T1621 (MFA Request
+Generation aka MFA Fatigue), T1098.001 (Additional Cloud
+Credentials), T1078.004 (Cloud Accounts).
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from typing import Iterable
+
+from digger.core.evidence import EvidenceStore, Finding
+from digger.detectors.base import Detector
+
+
+# ---- tunables ---- #
+
+MFA_FATIGUE_WINDOW_S = 600          # 10 min
+MFA_FATIGUE_MIN_DENIES = 5
+MFA_FATIGUE_FOLLOWUP_S = 1800       # 30 min — successful auth after spam
+
+IMPOSSIBLE_TRAVEL_WINDOW_S = 3600   # 1 hour
+
+SPRAY_WINDOW_S = 600                # 10 min
+SPRAY_MIN_FAILURES = 10
+SPRAY_MIN_DISTINCT_ACTORS = 5
+
+
+def _idp_event_records(store: EvidenceStore) -> list[dict]:
+    """Iterate every IdP-collector artifact and return the data dicts.
+
+    Sorted by ts so the cluster heuristics work."""
+    out: list[dict] = []
+    for art in store.iter_artifacts(category="identity"):
+        d = art["data"] or {}
+        if "event_type" not in d or "actor" not in d:
+            continue
+        d["_artifact_uuid"] = art["artifact_uuid"]
+        out.append(d)
+    out.sort(key=lambda d: (d.get("ts") or 0))
+    return out
+
+
+class IdpSecurityDetector(Detector):
+    name = "idp_security"
+    description = (
+        "Identity-provider attack patterns over Okta / Entra / "
+        "Workspace audit events: MFA fatigue (push-bombing), "
+        "OAuth consent grants, admin role grants, impossible-"
+        "travel sign-ins, password-spray, federation changes."
+    )
+
+    def to_sigma_template(self) -> dict:
+        return {
+            "title": "Identity-provider attack patterns",
+            "id": "digger-idp-security-template",
+            "description": (
+                "MFA fatigue / OAuth grant abuse / impossible "
+                "travel / password spray / federation change in "
+                "Okta / Entra / Workspace audit streams."
+            ),
+            "status": "experimental",
+            "author": "digger",
+            "logsource": {"product": "identity_provider"},
+            "detection": {
+                "selection_event_type": {
+                    "event_type": [
+                        "mfa_denied", "oauth_grant", "admin_grant",
+                        "federation_change", "auth_failure",
+                    ],
+                },
+                "condition": "selection_event_type",
+            },
+            "level": "high",
+            "tags": [
+                "attack.t1110.003", "attack.t1621",
+                "attack.t1098.001", "attack.t1098.005",
+                "attack.t1556.007", "attack.t1078.004",
+                "attack.credential_access", "attack.persistence",
+                "attack.initial_access",
+            ],
+        }
+
+    def detect(self, store: EvidenceStore) -> Iterable[Finding]:
+        events = _idp_event_records(store)
+
+        # ---- I2 OAuth grant + I3 admin grant + I6 federation change
+        # are per-event single-shot ---- #
+        for ev in events:
+            et = ev.get("event_type")
+            actor = ev.get("actor")
+            artifact_ref = ev["_artifact_uuid"]
+            if et == "oauth_grant":
+                yield Finding(
+                    detector=self.name,
+                    severity="high",
+                    title=(
+                        f"OAuth consent / grant: {actor} → "
+                        f"{ev.get('target') or '(unknown app)'}"
+                    ),
+                    summary=(
+                        f"Actor ``{actor}`` granted an OAuth "
+                        f"application access "
+                        f"({ev.get('raw_event_type')}). Target: "
+                        f"``{ev.get('target') or '(unknown)'}``. "
+                        "Most grants are legitimate, but consent-"
+                        "grant phishing (Storm-0539 / illicit "
+                        "consent / 'app impersonation') is a "
+                        "primary modern phishing vector — verify "
+                        "the app is one the user should have "
+                        "approved."
+                    ),
+                    artifact_refs=[artifact_ref],
+                    evidence={
+                        "kind": "oauth_grant",
+                        "provider": ev.get("provider"),
+                        "actor": actor,
+                        "src_ip": ev.get("src_ip"),
+                        "target_app": ev.get("target"),
+                        "country": ev.get("country"),
+                    },
+                    mitre="T1098.001",
+                )
+            elif et == "admin_grant":
+                yield Finding(
+                    detector=self.name,
+                    severity="high",
+                    title=(
+                        f"Admin/role privilege grant: actor "
+                        f"{actor} on target "
+                        f"{ev.get('target') or '(unknown)'}"
+                    ),
+                    summary=(
+                        f"Actor ``{actor}`` performed an admin / "
+                        "role-grant operation "
+                        f"({ev.get('raw_event_type')}). Verify the "
+                        "actor is supposed to be granting admin "
+                        "privileges and that the target is the "
+                        "intended recipient."
+                    ),
+                    artifact_refs=[artifact_ref],
+                    evidence={
+                        "kind": "admin_grant",
+                        "provider": ev.get("provider"),
+                        "actor": actor,
+                        "src_ip": ev.get("src_ip"),
+                        "target": ev.get("target"),
+                    },
+                    mitre="T1098",
+                )
+            elif et == "federation_change":
+                yield Finding(
+                    detector=self.name,
+                    severity="critical",
+                    title=(
+                        f"Federation / IdP-config change: {actor}"
+                    ),
+                    summary=(
+                        f"Actor ``{actor}`` modified the identity "
+                        f"federation configuration "
+                        f"({ev.get('raw_event_type')}). Adding a "
+                        "new federated IdP / authentication domain "
+                        "is a textbook persistence mechanism — the "
+                        "Storm-0539 / Storm-0558 / Golden SAML "
+                        "playbook. The new IdP can mint tokens for "
+                        "any user. Verify this change was approved "
+                        "+ the destination IdP is yours."
+                    ),
+                    artifact_refs=[artifact_ref],
+                    evidence={
+                        "kind": "federation_change",
+                        "provider": ev.get("provider"),
+                        "actor": actor,
+                        "src_ip": ev.get("src_ip"),
+                        "details": ev.get("raw"),
+                    },
+                    mitre="T1556.007",
+                )
+
+        # ---- I1 MFA fatigue ---- #
+        # Bucket mfa_denied events by (provider, actor, 60s-bucket).
+        denies_by_actor: dict[str, list[dict]] = defaultdict(list)
+        for ev in events:
+            if ev.get("event_type") == "mfa_denied":
+                denies_by_actor[ev.get("actor", "")].append(ev)
+        for actor, denies in denies_by_actor.items():
+            # Sliding 10-min window
+            for i in range(len(denies)):
+                window = [denies[i]]
+                t0 = denies[i].get("ts") or 0
+                for j in range(i + 1, len(denies)):
+                    tj = denies[j].get("ts") or 0
+                    if tj - t0 > MFA_FATIGUE_WINDOW_S:
+                        break
+                    window.append(denies[j])
+                if len(window) < MFA_FATIGUE_MIN_DENIES:
+                    continue
+                # Did the actor successfully auth shortly AFTER?
+                followup_success = next((
+                    e for e in events
+                    if e.get("actor") == actor
+                    and e.get("event_type") in ("auth", "mfa_auth")
+                    and e.get("outcome") == "success"
+                    and e.get("ts") and t0 <= e["ts"]
+                                          <= t0 + MFA_FATIGUE_FOLLOWUP_S
+                ), None)
+                severity = "critical" if followup_success else "high"
+                followup_note = ""
+                if followup_success:
+                    followup_note = (
+                        " A SUCCESSFUL auth followed shortly after — "
+                        "the actor likely caved to push-spam fatigue. "
+                        "Treat as account compromise; force "
+                        "re-authentication + investigate immediate "
+                        "session activity."
+                    )
+                yield Finding(
+                    detector=self.name,
+                    severity=severity,
+                    title=(
+                        f"MFA fatigue (push bombing): {actor} — "
+                        f"{len(window)} denies in "
+                        f"{MFA_FATIGUE_WINDOW_S}s"
+                    ),
+                    summary=(
+                        f"Actor ``{actor}`` had {len(window)} MFA "
+                        f"push challenges denied within a "
+                        f"{MFA_FATIGUE_WINDOW_S}-second window. "
+                        "Classic push-bombing / MFA-fatigue pattern "
+                        "— attacker holds the password, hammers the "
+                        "victim with prompts until they tap "
+                        f"Approve.{followup_note}"
+                    ),
+                    artifact_refs=[w["_artifact_uuid"] for w in window[:10]],
+                    evidence={
+                        "kind": "mfa_fatigue",
+                        "provider": window[0].get("provider"),
+                        "actor": actor,
+                        "deny_count": len(window),
+                        "window_s": MFA_FATIGUE_WINDOW_S,
+                        "followup_success": bool(followup_success),
+                        "src_ips": sorted({w.get("src_ip", "")
+                                            for w in window if w.get("src_ip")}),
+                    },
+                    mitre="T1621",
+                )
+                break   # one MFA-fatigue finding per actor; the next
+                        # window after the trigger would just dupe
+
+        # ---- I4 impossible travel ---- #
+        # Group auth-success events by actor, look for country-pair
+        # transitions within the impossible-travel window.
+        auths_by_actor: dict[str, list[dict]] = defaultdict(list)
+        for ev in events:
+            if ev.get("event_type") in ("auth", "mfa_auth") \
+                    and ev.get("outcome") == "success" \
+                    and ev.get("country"):
+                auths_by_actor[ev.get("actor", "")].append(ev)
+        for actor, auths in auths_by_actor.items():
+            for i in range(len(auths) - 1):
+                a, b = auths[i], auths[i + 1]
+                if a.get("country") == b.get("country"):
+                    continue
+                ta, tb = a.get("ts") or 0, b.get("ts") or 0
+                gap = abs(tb - ta)
+                if gap > IMPOSSIBLE_TRAVEL_WINDOW_S:
+                    continue
+                yield Finding(
+                    detector=self.name,
+                    severity="critical",
+                    title=(
+                        f"Impossible-travel sign-in: {actor} — "
+                        f"{a.get('country')} → {b.get('country')} "
+                        f"in {gap:.0f}s"
+                    ),
+                    summary=(
+                        f"Actor ``{actor}`` authenticated "
+                        f"successfully from "
+                        f"``{a.get('country')}`` "
+                        f"({a.get('src_ip')}) and then from "
+                        f"``{b.get('country')}`` "
+                        f"({b.get('src_ip')}) only {gap:.0f} seconds "
+                        "later. No legitimate travel bridges this "
+                        "gap — one of the two sessions is the "
+                        "attacker. Force re-authentication, kill "
+                        "the most-recent session, and investigate "
+                        "actions taken from both IPs."
+                    ),
+                    artifact_refs=[a["_artifact_uuid"],
+                                    b["_artifact_uuid"]],
+                    evidence={
+                        "kind": "impossible_travel",
+                        "provider": a.get("provider"),
+                        "actor": actor,
+                        "country_a": a.get("country"),
+                        "country_b": b.get("country"),
+                        "ip_a": a.get("src_ip"),
+                        "ip_b": b.get("src_ip"),
+                        "gap_seconds": gap,
+                    },
+                    mitre="T1078.004",
+                )
+                break   # one impossible-travel finding per actor
+
+        # ---- I5 password spray ---- #
+        # Bucket auth-failure events by (src_ip, 60s-bucket), find
+        # buckets with >=10 failures hitting >=5 distinct actors in
+        # any 10-min sliding window.
+        failures_by_ip: dict[str, list[dict]] = defaultdict(list)
+        for ev in events:
+            if ev.get("event_type") in (
+                "auth", "auth_failure", "mfa_auth",
+            ) and ev.get("outcome") == "failure" \
+                    and ev.get("src_ip"):
+                failures_by_ip[ev["src_ip"]].append(ev)
+        for src_ip, failures in failures_by_ip.items():
+            for i in range(len(failures)):
+                window = [failures[i]]
+                t0 = failures[i].get("ts") or 0
+                for j in range(i + 1, len(failures)):
+                    tj = failures[j].get("ts") or 0
+                    if tj - t0 > SPRAY_WINDOW_S:
+                        break
+                    window.append(failures[j])
+                if len(window) < SPRAY_MIN_FAILURES:
+                    continue
+                distinct_actors = {w.get("actor", "") for w in window}
+                if len(distinct_actors) < SPRAY_MIN_DISTINCT_ACTORS:
+                    continue
+                yield Finding(
+                    detector=self.name,
+                    severity="critical",
+                    title=(
+                        f"Password spray from {src_ip}: "
+                        f"{len(window)} failures across "
+                        f"{len(distinct_actors)} actors in "
+                        f"{SPRAY_WINDOW_S}s"
+                    ),
+                    summary=(
+                        f"IP ``{src_ip}`` made {len(window)} failed "
+                        f"authentication attempts against "
+                        f"{len(distinct_actors)} distinct actors "
+                        f"within {SPRAY_WINDOW_S} seconds. Password-"
+                        "spray fingerprint — attacker tries the same "
+                        "small set of common passwords against a "
+                        "large set of users, staying under per-"
+                        "account lockout thresholds. Block the IP "
+                        "+ enable conditional-access policy "
+                        "requiring MFA from non-trusted networks."
+                    ),
+                    artifact_refs=[w["_artifact_uuid"]
+                                    for w in window[:10]],
+                    evidence={
+                        "kind": "password_spray",
+                        "provider": window[0].get("provider"),
+                        "src_ip": src_ip,
+                        "failure_count": len(window),
+                        "distinct_actors": sorted(distinct_actors)[:30],
+                        "window_s": SPRAY_WINDOW_S,
+                    },
+                    mitre="T1110.003",
+                )
+                break   # one spray finding per src_ip
