@@ -46,6 +46,7 @@ def all_detectors() -> list[Detector]:
     from digger.detectors.discovery import DiscoveryDetector
     from digger.detectors.vect import VectDetector
     from digger.detectors.info_stealer import InfoStealerDetector
+    from digger.detectors.k8s_security import K8sSecurityDetector
     from digger.detectors.timeline import TimelineBuilder
     from digger.loki.detector import LokiStyleDetector
     from digger.memory.detector import MemoryAnomalyDetector
@@ -91,6 +92,7 @@ def all_detectors() -> list[Detector]:
         DiscoveryDetector(),
         VectDetector(),
         InfoStealerDetector(),
+        K8sSecurityDetector(),
         LokiStyleDetector(),
         MemoryAnomalyDetector(),
         UnsignedBinaryDetector(),

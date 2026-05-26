@@ -708,6 +708,44 @@ def cmd_falco_stream(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_k8s_collect(args: argparse.Namespace) -> int:
+    from digger.k8s import KubectlError, collect_cluster, discover_binary
+    binary = discover_binary()
+    if not binary:
+        print("no kubectl binary in PATH "
+              "(install via your distro package manager)",
+              file=sys.stderr)
+        return 1
+    try:
+        summary = collect_cluster(
+            args.case_dir,
+            binary=binary,
+            context=args.context,
+            namespace=args.namespace,
+        )
+    except KubectlError as exc:
+        print(f"kubectl error: {exc}", file=sys.stderr)
+        return 2
+    print(f"[k8s] binary: {summary.binary}")
+    if summary.context:
+        print(f"[k8s] context: {summary.context}")
+    if summary.namespace:
+        print(f"[k8s] namespace: {summary.namespace}")
+    print(f"[k8s] resources attempted: {summary.resources_attempted}, "
+          f"succeeded: {summary.resources_succeeded}")
+    print(f"[k8s] items emitted: {summary.items_emitted}")
+    print(f"[k8s] elapsed: {summary.elapsed_s:.1f}s")
+    if summary.per_resource_errors:
+        print("\n  Per-resource errors:")
+        for resource, err in summary.per_resource_errors.items():
+            print(f"    {resource:24s} {err[:200]}")
+    if args.verbose and summary.per_resource:
+        print("\n  Per-resource counts:")
+        for resource, n in sorted(summary.per_resource.items()):
+            print(f"    {resource:24s} {n:>6}")
+    return 0
+
+
 def cmd_plaso_info(args: argparse.Namespace) -> int:
     from digger.plaso import PlasoError, discover_binary, info
     binary = discover_binary()
@@ -1479,6 +1517,29 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Stop after this many events (default: until "
                           "falco exits or SIGTERM)")
     pfs.set_defaults(func=cmd_falco_stream)
+
+    pk = sub.add_parser(
+        "k8s",
+        help="Kubernetes cluster-side forensics (requires kubectl + "
+             "a reachable cluster)",
+    )
+    k_sub = pk.add_subparsers(dest="k8s_cmd", required=True)
+
+    pkc = k_sub.add_parser(
+        "collect",
+        help="Fetch curated cluster resources (pods, RBAC, "
+             "networkpolicies, secrets metadata) into the case "
+             "as digger Artifacts. K8sSecurityDetector runs on "
+             "them at digger scan time.",
+    )
+    _add_case_arg(pkc)
+    pkc.add_argument("--context",
+                     help="kubectl context to use (default: current)")
+    pkc.add_argument("--namespace", "-n",
+                     help="Scope to one namespace (default: all)")
+    pkc.add_argument("--verbose", "-v", action="store_true",
+                     help="Print per-resource item counts")
+    pkc.set_defaults(func=cmd_k8s_collect)
 
     pp = sub.add_parser(
         "plaso",

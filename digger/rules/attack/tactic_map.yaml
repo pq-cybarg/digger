@@ -57,6 +57,9 @@ techniques:
   T1547.006: [persistence, privilege-escalation]
   T1098:     [persistence]
   T1098.004: [persistence]
+  T1525:     [persistence]
+  T1078:     [defense-evasion, persistence, privilege-escalation, initial-access]
+  T1078.001: [defense-evasion, persistence, privilege-escalation, initial-access]
 
   # Privilege Escalation
   T1055:     [defense-evasion, privilege-escalation]
