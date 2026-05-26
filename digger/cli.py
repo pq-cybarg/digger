@@ -746,6 +746,42 @@ def cmd_k8s_collect(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_mcp_audit(args: argparse.Namespace) -> int:
+    from digger.mcp import audit_mcp_configs, emit_records_to_store
+    store = EvidenceStore(args.case_dir)
+    try:
+        roots = ([r.strip() for r in args.roots.split(",") if r.strip()]
+                  if args.roots else None)
+        records = audit_mcp_configs(roots=roots)
+        emitted = emit_records_to_store(records, store)
+        proj_scoped = sum(1 for r in records if r.project_scoped)
+        with_env = sum(1 for r in records if r.env)
+        raw_script = sum(
+            1 for r in records
+            if r.pkg_ecosystem in ("raw_node", "raw_python", "raw_shell")
+        )
+        net_transport = sum(
+            1 for r in records
+            if r.transport.lower() in ("sse", "http", "https", "ws", "wss")
+        )
+        print(f"[mcp] MCP servers audited: {len(records)}")
+        print(f"[mcp]   project-scoped:    {proj_scoped}")
+        print(f"[mcp]   with env vars:     {with_env}")
+        print(f"[mcp]   raw-script:        {raw_script}")
+        print(f"[mcp]   network-transport: {net_transport}")
+        print(f"[mcp] artifacts emitted: {emitted}")
+        if args.verbose:
+            print("\n  Per-config breakdown:")
+            by_kind: dict[str, int] = {}
+            for r in records:
+                by_kind[r.config_kind] = by_kind.get(r.config_kind, 0) + 1
+            for k, n in sorted(by_kind.items()):
+                print(f"    {k:20s} {n:>4}")
+    finally:
+        store.close()
+    return 0
+
+
 def cmd_android_collect(args: argparse.Namespace) -> int:
     from digger.android import AdbError, collect_device, discover_binary
     binary = discover_binary()
@@ -1723,6 +1759,31 @@ def build_parser() -> argparse.ArgumentParser:
     pac.add_argument("--max-packages",
                      help="Cap on per-package dumpsys (default 600)")
     pac.set_defaults(func=cmd_android_collect)
+
+    pm = sub.add_parser(
+        "mcp",
+        help="MCP (Model Context Protocol) configuration auditor "
+             "for LLM agent tooling. Scans Claude Desktop / Claude "
+             "Code / Cursor / Continue / Cline / Roo Code config "
+             "files (and any project-scoped .mcp.json) for tool-"
+             "poisoning patterns.",
+    )
+    m_sub = pm.add_subparsers(dest="mcp_cmd", required=True)
+
+    pma = m_sub.add_parser(
+        "audit",
+        help="Parse every MCP-server entry found in well-known "
+             "config locations + project-local .mcp.json files, "
+             "emit one Artifact per server. McpAuditDetector "
+             "runs on them at digger scan time.",
+    )
+    _add_case_arg(pma)
+    pma.add_argument("--roots",
+                     help="Comma-separated explicit config files "
+                          "to parse (default: auto-discover)")
+    pma.add_argument("--verbose", "-v", action="store_true",
+                     help="Print per-config-kind breakdown")
+    pma.set_defaults(func=cmd_mcp_audit)
 
     pp = sub.add_parser(
         "plaso",
