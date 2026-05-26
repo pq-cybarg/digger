@@ -746,6 +746,41 @@ def cmd_k8s_collect(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_android_collect(args: argparse.Namespace) -> int:
+    from digger.android import AdbError, collect_device, discover_binary
+    binary = discover_binary()
+    if not binary:
+        print("no adb binary in PATH "
+              "(install android-platform-tools)",
+              file=sys.stderr)
+        return 1
+    try:
+        summary = collect_device(
+            args.case_dir,
+            serial=args.serial,
+            binary=binary,
+            max_packages=int(args.max_packages)
+                if args.max_packages else 600,
+        )
+    except AdbError as exc:
+        print(f"adb error: {exc}", file=sys.stderr)
+        return 2
+    print(f"[android] binary: {summary.binary}")
+    print(f"[android] devices in 'device' state: "
+          f"{summary.devices_seen}")
+    if summary.serial:
+        print(f"[android] selected serial: {summary.serial}")
+    print(f"[android] packages listed: {summary.packages_listed}")
+    print(f"[android] packages dumped: {summary.packages_dumped}")
+    print(f"[android] artifacts emitted: {summary.artifacts_emitted}")
+    print(f"[android] elapsed: {summary.elapsed_s:.1f}s")
+    if summary.errors:
+        print("\n  Errors:")
+        for err in summary.errors:
+            print(f"    {err[:240]}")
+    return 0 if summary.artifacts_emitted else 1
+
+
 def cmd_slsa_audit(args: argparse.Namespace) -> int:
     from digger.slsa import audit_local_packages, emit_records_to_store
     store = EvidenceStore(args.case_dir)
@@ -1663,6 +1698,31 @@ def build_parser() -> argparse.ArgumentParser:
     psa.add_argument("--verbose", "-v", action="store_true",
                      help="Print per-ecosystem breakdown")
     psa.set_defaults(func=cmd_slsa_audit)
+
+    pa = sub.add_parser(
+        "android",
+        help="Android device forensics via adb (requires "
+             "android-platform-tools + a USB-attached, debug-"
+             "authorized device). Strictly read-only: enumerates "
+             "package list, dumpsys packages, device-policy + "
+             "accessibility state.",
+    )
+    a_sub = pa.add_subparsers(dest="android_cmd", required=True)
+
+    pac = a_sub.add_parser(
+        "collect",
+        help="Pull package list + per-package dumpsys + device-"
+             "policy / accessibility / install-source state into "
+             "the case. AndroidSecurityDetector runs on them at "
+             "digger scan time.",
+    )
+    _add_case_arg(pac)
+    pac.add_argument("--serial", "-s",
+                     help="adb serial of target device (default: "
+                          "first device in 'device' state)")
+    pac.add_argument("--max-packages",
+                     help="Cap on per-package dumpsys (default 600)")
+    pac.set_defaults(func=cmd_android_collect)
 
     pp = sub.add_parser(
         "plaso",

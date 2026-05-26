@@ -49,6 +49,7 @@ def all_detectors() -> list[Detector]:
     from digger.detectors.k8s_security import K8sSecurityDetector
     from digger.detectors.idp_security import IdpSecurityDetector
     from digger.detectors.slsa_audit import SlsaAuditDetector
+    from digger.detectors.android_security import AndroidSecurityDetector
     from digger.detectors.timeline import TimelineBuilder
     from digger.loki.detector import LokiStyleDetector
     from digger.memory.detector import MemoryAnomalyDetector
@@ -97,6 +98,7 @@ def all_detectors() -> list[Detector]:
         K8sSecurityDetector(),
         IdpSecurityDetector(),
         SlsaAuditDetector(),
+        AndroidSecurityDetector(),
         LokiStyleDetector(),
         MemoryAnomalyDetector(),
         UnsignedBinaryDetector(),
