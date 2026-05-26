@@ -84,6 +84,7 @@ def _tags(finding: dict) -> list[str]:
                                   "attack.impact", "attack.persistence"],
         "shai_hulud_blocker":   ["attack.impact", "attack.persistence",
                                   "attack.privilege_escalation"],
+        "discovery":            ["attack.discovery"],
         "threat_actor":         ["attack.execution"],
         "env_hijack":           ["attack.privilege_escalation", "attack.defense_evasion"],
         "persistence_outlier": ["attack.persistence"],

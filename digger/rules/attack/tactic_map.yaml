@@ -106,10 +106,25 @@ techniques:
   T1558.004: [credential-access]
 
   # Discovery
+  T1007:     [discovery]
+  T1016:     [discovery]
+  T1018:     [discovery]
+  T1033:     [discovery]
+  T1046:     [discovery]
+  T1049:     [discovery]
   T1057:     [discovery]
+  T1069:     [discovery]
+  T1069.001: [discovery]
+  T1069.002: [discovery]
   T1082:     [discovery]
+  T1083:     [discovery]
   T1087:     [discovery]
+  T1087.001: [discovery]
   T1087.002: [discovery]
+  T1135:     [discovery]
+  T1482:     [discovery]
+  T1518:     [discovery]
+  T1518.001: [discovery]
 
   # Lateral Movement
   T1021:     [lateral-movement]
