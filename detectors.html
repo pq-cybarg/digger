@@ -10,7 +10,7 @@
 <main>
 
 <h1>Detectors
-  <span class="subtitle">32 detectors over a collected case, layered from behavioral heuristics to live intel matching, with auto-Sigma export per detector.</span>
+  <span class="subtitle">50 detectors over a collected case, layered from behavioral heuristics to live intel matching, with auto-Sigma export per detector.</span>
 </h1>
 
 <h2>How they fit together</h2>
@@ -232,6 +232,20 @@ Sigma YAML rules from the bundled corpus AND the live SigmaHQ rule
 cache (<code>sigmahq_corpus</code> feed), matches them against
 process_creation and network_connection log sources. See
 <a href="sigma.html">Sigma rules</a>.</p>
+
+<h3>Specialized auditors</h3>
+
+<p>Detectors that pair with a dedicated collector / ingester and run
+only after that collector has populated the case:</p>
+
+<ul class="kv">
+  <li><b><code>idp_security</code></b> — see <a href="idp.html">IdP audit-log observability</a>. Ingests Okta / Entra / Workspace audit logs and detects MFA fatigue, OAuth phishing, admin / federation tampering, impossible travel, password spray (I1–I6, T1110.003 / T1621 / T1098.001 / T1078.004 / T1556.007).</li>
+  <li><b><code>slsa_audit</code></b> — see <a href="slsa.html">SLSA provenance audit</a>. Walks node_modules + site-packages, parses any local in-toto / SLSA / sigstore-bundle attestations, flags missing / unparseable / untrusted-builder / source-mismatched provenance (S1–S5, T1195.002).</li>
+  <li><b><code>k8s_security</code></b> — Kubernetes cluster-side forensics. Privileged pods, dangerous hostPath, hostNetwork / PID / IPC, ClusterRoleBinding to system:authenticated, SA → cluster-admin, untrusted-registry images, secret-baked-in-env, default SA, namespace missing NetworkPolicy (K1–K10, T1611 / T1098 / T1525 / T1078.001).</li>
+  <li><b><code>android_security</code></b> — see <a href="android.html">Android forensics (adb)</a>. Sideloaded installs, AccessibilityService abuse, device-admin grants, swiss-army-knife permission combos, stale security patches (A1–A6, T1417 / T1626 / T1430 / T1404).</li>
+  <li><b><code>mcp_audit</code></b> — see <a href="mcp.html">MCP config audit</a>. Project-scoped autoinstall, raw-script exec, credential env vars, network transport, untrusted npm scope (P1–P5, T1195.002 / T1059 / T1552.001 / T1071.001).</li>
+  <li><b><code>ci_workflow_audit</code></b> — see <a href="ci-workflow-audit.html">CI/CD workflow audit</a>. Pwn-request, workflow_run from forks, untrusted-input interpolations, unpinned third-party actions, persist-credentials, write-all permissions, self-modifying workflows (W1–W7, T1199 / T1195.002 / T1059 / T1552.001 / T1078.004).</li>
+</ul>
 
 <h3><code>timeline</code></h3>
 
