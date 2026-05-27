@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VS Code extension + settings audit — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="vscode">
+<main>
+
+<h1>VS Code extension + settings audit
+  <span class="subtitle">Sideloaded extensions, untrusted publishers, workspace-trust disablement, MITM proxy, shell hijacks, project-scoped risky keys (V1-V7).</span>
+</h1>
+
+<p>VS Code extensions run with the user's privileges, share the
+window's network access, and (with no sandbox in the stable build)
+can read every workspace file the operator opens. A malicious
+extension OR a settings.json that disables workspace trust is
+silent code-exec on developer hosts.</p>
+
+<h2>Config locations searched</h2>
+
+<p>Extension directories (auto-discovered):</p>
+<ul class="kv">
+  <li><code>~/.vscode/extensions/</code></li>
+  <li><code>~/.vscode-insiders/extensions/</code></li>
+  <li><code>~/.vscode-oss/extensions/</code></li>
+  <li><code>~/.cursor/extensions/</code></li>
+  <li><code>~/.windsurf/extensions/</code></li>
+  <li><code>%APPDATA%/Code/User/extensions/</code> (Windows)</li>
+</ul>
+
+<p>Settings files (all platforms):</p>
+<ul class="kv">
+  <li><code>~/Library/Application Support/Code/User/settings.json</code> (macOS)</li>
+  <li><code>~/.config/Code/User/settings.json</code> (Linux)</li>
+  <li><code>%APPDATA%/Code/User/settings.json</code> (Windows)</li>
+  <li>Equivalents for Code-Insiders + Cursor</li>
+  <li><strong>Project-scoped:</strong> <code>./.vscode/settings.json</code> (ships in repos — higher risk)</li>
+</ul>
+
+<h2>What's parsed</h2>
+
+<p>Extensions: <code>publisher</code>, <code>name</code>,
+<code>version</code>, <code>main</code>,
+<code>activationEvents</code>, <code>contributes.commands</code>
+count, declared capabilities, and the
+<code>.vsixmanifest</code>'s <code>sourceMarketplace</code> tag to
+distinguish Marketplace vs sideloaded VSIX.</p>
+
+<p>Settings (JSONC-tolerant — // and /* */ comments + trailing
+commas): workspace trust enabled, untrustedFiles mode,
+<code>http.proxyStrictSSL</code>, shell + automation-profile
+overrides per OS, task auto-detect, extension auto-update.</p>
+
+<h2>Trusted-publisher allowlist</h2>
+
+<p><code>KNOWN_GOOD_PUBLISHERS</code> covers Microsoft, GitHub,
+Anthropic, Continue, Cline, Roo, Cursor, language servers
+(<code>ms-python</code>, <code>rust-lang</code>, <code>golang</code>,
+<code>redhat</code>, <code>dbaeumer</code>, <code>biomejs</code>,
+<code>charliermarsh</code>, etc.), AWS, Google, HashiCorp,
+Azure-tools.</p>
+
+<p>Extend via <code>DIGGER_VSCODE_TRUSTED_PUBLISHERS</code>
+(comma-separated).</p>
+
+<h2>Detection layers (V1–V7)</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>What it catches</th><th>MITRE</th></tr></thead>
+  <tbody>
+    <tr><td>V1</td><td>medium</td><td>Sideloaded extension — <code>.vsixmanifest</code> doesn't carry the Marketplace source. Skipped Marketplace review; legit for in-development, suspicious otherwise.</td><td>T1195.002</td></tr>
+    <tr><td>V2</td><td>medium</td><td>Untrusted publisher — not on KNOWN_GOOD_PUBLISHERS allowlist.</td><td>T1195.002</td></tr>
+    <tr><td>V3</td><td>high</td><td><code>security.workspace.trust.enabled</code> = false. Workspace trust is what prevents auto-tasks-on-open in a freshly-cloned repo.</td><td>T1546</td></tr>
+    <tr><td>V4</td><td>medium</td><td><code>security.workspace.trust.untrustedFiles</code> = "open". Files outside trusted folders auto-load.</td><td>T1546</td></tr>
+    <tr><td>V5</td><td>high</td><td><code>http.proxyStrictSSL</code> = false. MITM-permissive — every extension's calls (Copilot, Continue, Marketplace, language servers, telemetry).</td><td>T1557</td></tr>
+    <tr><td>V6</td><td>high</td><td>Terminal shell or automation-profile points at a writable / scratch path (<code>/tmp</code>, <code>/Users/Shared</code>, <code>/private/var/folders</code>). Hijacks every terminal the user opens.</td><td>T1059</td></tr>
+    <tr><td>V7</td><td>high</td><td>Project-scoped <code>.vscode/settings.json</code> sets any of the above risky keys. Clone + open auto-trips. Escalation of the per-key finding.</td><td>T1195.002</td></tr>
+  </tbody>
+</table>
+
+<h2>CLI</h2>
+
+<pre><code>$ digger vscode audit --case-dir /tmp/case [--roots ext_root1,ext_root2]
+
+[vscode] extensions audited: 47
+[vscode]   sideloaded:    1
+[vscode] settings files audited: 3
+[vscode]   with risky keys: 0
+[vscode] artifacts emitted: 50
+</code></pre>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>
