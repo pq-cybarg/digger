@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Git hook audit — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="git-hooks">
+<main>
+
+<h1>Git hook audit
+  <span class="subtitle">.git/hooks/ persistence + injection audit (G1-G7).</span>
+</h1>
+
+<p>Every developer host has dozens of git repos. <code>.git/hooks/*</code>
+runs with the user's privileges on every routine git operation — and
+a poisoned <code>post-checkout</code> runs silently on every
+<code>git pull</code>. That's a textbook silent-persistence primitive.
+The existing TrapDoor detector only matches specific campaign markers
+in hooks; this auditor catches the general patterns.</p>
+
+<h2>Strictly local</h2>
+
+<p>The auditor never runs a hook, never alters the repo, never calls
+out to the network. It walks the directory tree, finds every repo
+(<code>.git/</code> child), honors <code>core.hooksPath</code> if
+overridden, parses each executable hook, and records:</p>
+
+<ul class="kv">
+  <li>sha256, size, file mode, executable bit, first line</li>
+  <li>silent-operation classification (post-checkout / post-merge / post-rewrite / pre-push / post-commit fire on routine operations)</li>
+  <li><code>is_known_sample</code> — bare git-init hooks (shebang + comments only, no body) are skipped</li>
+  <li>six suspicious-pattern flags (see layers below)</li>
+</ul>
+
+<h2>What's skipped</h2>
+
+<ul class="kv">
+  <li>Vendored directories: <code>node_modules</code>, <code>.venv</code>, <code>venv</code>, <code>build</code>, <code>dist</code>, <code>__pycache__</code>, <code>.tox</code>, <code>.cache</code>, <code>site-packages</code> — they often ship leftover <code>.git/</code> from packages</li>
+  <li><code>*.sample</code> files — git ships these on init; not customer code</li>
+  <li>Bare git-sample hooks recognized as the literal init body</li>
+</ul>
+
+<p>Safety caps: 1 MiB per hook, 64 hooks per repo, 5000 repos per root.</p>
+
+<h2>Detection layers (G1–G7)</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>What it catches</th><th>MITRE</th></tr></thead>
+  <tbody>
+    <tr><td>G1</td><td>critical</td><td>Pipe-to-shell download cradle: <code>curl ... | sh</code>. Essentially never legitimate in a hook.</td><td>T1059</td></tr>
+    <tr><td>G2</td><td>high</td><td>Network-fetch in a silent-operation hook (post-checkout / post-merge / post-rewrite / pre-push / post-commit). Fires on every routine git operation — any C2 callback becomes every-time-the-dev-touches-git.</td><td>T1546</td></tr>
+    <tr><td>G3</td><td>medium</td><td>Network-fetch in a non-silent hook. Rarely needed; manual review.</td><td>T1546</td></tr>
+    <tr><td>G4</td><td>high</td><td>Eval of attacker-controllable input (<code>eval "$VAR"</code> / <code>eval $1</code>). In commit-msg the input is the commit message itself; in post-checkout it's the ref name.</td><td>T1059</td></tr>
+    <tr><td>G5</td><td>high</td><td>Self-modifying hook (writes to <code>.git/config</code>, <code>.git/hooks/</code>, <code>.git/packed-refs</code>). Hook persistence + self-replication primitive.</td><td>T1546</td></tr>
+    <tr><td>G6</td><td>medium</td><td>Long base64 or escaped-hex sequence in hook. Often hides a download cradle or shellcode.</td><td>T1027</td></tr>
+    <tr><td>G7</td><td>info</td><td>Silent-operation hook present (no other layer fired). Surface-area awareness so a tampered one stands out next time.</td><td>T1546</td></tr>
+  </tbody>
+</table>
+
+<p>A clean <code>is_known_sample</code> hook emits NO findings. The
+"stronger finding suppresses weaker" semantics apply: G1 suppresses
+G2/G3; any specific finding suppresses the G7 info finding.</p>
+
+<h2>CLI</h2>
+
+<pre><code>$ digger git audit-hooks --case-dir /tmp/case [--roots ~/src,~/work]
+
+[git] executable hooks audited: 47
+[git]   pipe-to-shell:    0
+[git]   network-fetch:    2
+[git]   eval input:       0
+[git]   self-modifying:   0
+[git]   encoded payload:  1
+[git]   silent-op hooks:  18
+[git] artifacts emitted: 47
+</code></pre>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>
