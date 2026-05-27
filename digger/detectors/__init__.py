@@ -53,6 +53,7 @@ def all_detectors() -> list[Detector]:
     from digger.detectors.mcp_audit import McpAuditDetector
     from digger.detectors.ci_workflow_audit import CiWorkflowAuditDetector
     from digger.detectors.git_hook_audit import GitHookAuditDetector
+    from digger.detectors.macos_tcc import MacosTccDetector
     from digger.detectors.timeline import TimelineBuilder
     from digger.loki.detector import LokiStyleDetector
     from digger.memory.detector import MemoryAnomalyDetector
@@ -105,6 +106,7 @@ def all_detectors() -> list[Detector]:
         McpAuditDetector(),
         CiWorkflowAuditDetector(),
         GitHookAuditDetector(),
+        MacosTccDetector(),
         LokiStyleDetector(),
         MemoryAnomalyDetector(),
         UnsignedBinaryDetector(),
