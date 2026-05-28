@@ -60,6 +60,7 @@ def all_detectors() -> list[Detector]:
     from digger.detectors.systemd_audit import SystemdAuditDetector
     from digger.detectors.shell_profile_audit import ShellProfileAuditDetector
     from digger.detectors.cron_audit import CronAuditDetector
+    from digger.detectors.windows_registry_audit import WindowsRegistryAuditDetector
     from digger.detectors.timeline import TimelineBuilder
     from digger.loki.detector import LokiStyleDetector
     from digger.memory.detector import MemoryAnomalyDetector
@@ -119,6 +120,7 @@ def all_detectors() -> list[Detector]:
         SystemdAuditDetector(),
         ShellProfileAuditDetector(),
         CronAuditDetector(),
+        WindowsRegistryAuditDetector(),
         LokiStyleDetector(),
         MemoryAnomalyDetector(),
         UnsignedBinaryDetector(),
