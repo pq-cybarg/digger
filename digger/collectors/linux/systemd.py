@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -16,6 +15,16 @@ _UNIT_DIRS = [
     "/etc/systemd/system",
     "/usr/lib/systemd/system",
     "/lib/systemd/system",
+    "/run/systemd/system",
+]
+
+# Subset of _UNIT_DIRS we read full unit text from. Vendor-shipped
+# /usr/lib + /lib trees are deliberately skipped — they'd generate
+# massive noise and any signed-package compromise lives outside the
+# scope of this collector. We read /etc/systemd/system (operator
+# customizations) and /run/systemd/system (runtime-generated).
+_DEEP_AUDIT_SYSTEM_DIRS = [
+    "/etc/systemd/system",
     "/run/systemd/system",
 ]
 
@@ -110,6 +119,35 @@ class SystemdCollector(Collector):
                     continue
                 yield self.make(
                     subject=f"user-unit:{unit}",
+                    path=str(unit),
+                    owner_uid=st.st_uid,
+                    size=st.st_size,
+                    mtime=st.st_mtime,
+                    contents=text[:65536],
+                    mitre="T1543.002",
+                )
+
+        # System-wide unit files in operator-customized + runtime-
+        # generated dirs. Skip symlinks (they typically point into
+        # /usr/lib/systemd/system, which the dir-listing artifact
+        # already captured by name + symlink_target).
+        for d in _DEEP_AUDIT_SYSTEM_DIRS:
+            p = Path(d)
+            if not p.is_dir():
+                continue
+            for unit in list(p.glob("*.service")) + list(p.glob("*.timer")) + list(p.glob("*.path")):
+                if unit.is_symlink():
+                    continue
+                try:
+                    text = unit.read_text(errors="replace")
+                except (PermissionError, OSError):
+                    continue
+                try:
+                    st = unit.stat()
+                except OSError:
+                    continue
+                yield self.make(
+                    subject=f"system-unit:{unit}",
                     path=str(unit),
                     owner_uid=st.st_uid,
                     size=st.st_size,

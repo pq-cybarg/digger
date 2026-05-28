@@ -10,11 +10,13 @@ parallel to ``MacosLaunchdDetector`` for launchd plists.
 Scope
 -----
 Consumes ``linux.systemd`` Artifacts with subject ``user-unit:*``
-(per-user units under ``~/.config/systemd/user/``). The collector
-records the full unit text for these; system-wide units in
-``/etc/systemd/system`` / ``/usr/lib/systemd/system`` get only
-filename listings today and are not yet deep-audited — a clean
-follow-up iteration.
+or ``system-unit:*``:
+  - ``user-unit:*`` — per-user units under ``~/.config/systemd/user/``
+  - ``system-unit:*`` — operator-customized + runtime-generated
+    units under ``/etc/systemd/system`` and ``/run/systemd/system``
+
+The vendor-shipped ``/usr/lib/systemd/system`` tree is intentionally
+out of scope (signed-package files, would generate massive noise).
 
 Detection layers (U1-U7)
 """
@@ -170,7 +172,8 @@ class SystemdAuditDetector(Detector):
     def detect(self, store: EvidenceStore) -> Iterable[Finding]:
         for art in store.iter_artifacts(collector="linux.systemd"):
             subj = art.get("subject") or ""
-            if not subj.startswith("user-unit:"):
+            if not (subj.startswith("user-unit:")
+                    or subj.startswith("system-unit:")):
                 continue
             yield from self._check_unit(art)
 
