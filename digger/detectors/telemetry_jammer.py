@@ -408,41 +408,59 @@ class TelemetryJammerDetector(Detector):
                         break
 
         # ---- T6 — registry AllowTelemetry value ---- #
-        for art in store.iter_artifacts(collector="registry_persistence"):
+        #
+        # The windows.registry_persistence collector emits one
+        # Artifact per key with a ``values`` dict (name -> value)
+        # plus ``hive`` + ``subkey`` fields. We also accept the
+        # legacy flat-shape ``path``/``name``/``value`` artifacts
+        # in case an out-of-tree collector emits them.
+        for art in store.iter_artifacts(
+            collector="windows.registry_persistence",
+        ):
             d = art["data"] or {}
-            path = (d.get("path") or d.get("KeyPath") or "").lower()
-            name = (d.get("name") or d.get("ValueName") or "").lower()
-            value = d.get("value") if d.get("value") is not None else d.get("Value")
-            if "datacollection" in path and name == "allowtelemetry":
-                try:
-                    v = int(value) if value is not None else None
-                except (TypeError, ValueError):
-                    v = None
-                if v is None or v > 0:
-                    yield Finding(
-                        detector=self.name,
-                        severity="low",
-                        title=(
-                            f"AllowTelemetry registry value is "
-                            f"{value or 'missing'} (≥1 means telemetry on)"
+            subkey = (d.get("subkey") or "").lower()
+            if "datacollection" not in subkey:
+                continue
+            values = d.get("values") or {}
+            if not isinstance(values, dict):
+                continue
+            value = None
+            for n, v in values.items():
+                if str(n).lower() == "allowtelemetry":
+                    value = v
+                    break
+            try:
+                v_int = int(value) if value is not None else None
+            except (TypeError, ValueError):
+                v_int = None
+            if v_int is None or v_int > 0:
+                yield Finding(
+                    detector=self.name,
+                    severity="low",
+                    title=(
+                        f"AllowTelemetry registry value is "
+                        f"{value if value is not None else 'missing'} "
+                        "(≥1 means telemetry on)"
+                    ),
+                    summary=(
+                        f"HKLM\\SOFTWARE\\Policies\\Microsoft\\"
+                        f"Windows\\DataCollection\\AllowTelemetry "
+                        f"= {value}. Set to 0 (or remove the key) "
+                        "via the registry remediation commands. "
+                        "Pro/Enterprise honors 0; Home edition "
+                        "floors at 1."
+                    ),
+                    artifact_refs=[art["artifact_uuid"]],
+                    evidence={
+                        "kind": "telemetry_registry",
+                        "value": value,
+                        "remediation_commands": _redact_block(
+                            _REMEDIATION_REGISTRY,
                         ),
-                        summary=(
-                            f"HKLM\\SOFTWARE\\Policies\\Microsoft\\"
-                            f"Windows\\DataCollection\\AllowTelemetry "
-                            f"= {value}. Set to 0 (or remove the key) "
-                            "via the registry remediation commands. "
-                            "Pro/Enterprise honors 0; Home edition "
-                            "floors at 1."
-                        ),
-                        artifact_refs=[art["artifact_uuid"]],
-                        evidence={
-                            "kind": "telemetry_registry",
-                            "value": value,
-                            "remediation_commands": _redact_block(_REMEDIATION_REGISTRY),
-                            "reversible": True,
-                        },
-                        mitre="T1059.001",
-                    )
+                        "reversible": True,
+                    },
+                    mitre="T1059.001",
+                )
 
         # ---- T7 — telemetry DNS history ---- #
         seen_hosts: set[str] = set()
