@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Windows registry persistence audit — digger docs</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="windows-registry-audit">
+<main>
+
+<h1>Windows registry persistence audit
+  <span class="subtitle">Run / RunOnce / Winlogon / SilentProcessExit deep audit (R1-R6) — completes the cross-platform persistence story.</span>
+</h1>
+
+<p>Closes the third leg of the cross-platform persistence story
+(<a href="macos-launchd.html">macOS launchd</a> +
+<a href="systemd-audit.html">Linux systemd</a> /
+<a href="cron-audit.html">cron</a> /
+<a href="shell-profile-audit.html">shell rc</a> + Windows
+registry). The <code>windows.registry_persistence</code> collector
+already enumerates the canonical persistence keys; no detector
+currently audited those artifacts for malicious patterns until
+this one.</p>
+
+<h2>Scope</h2>
+
+<p>Consumes <code>windows.registry_persistence</code> Artifacts.
+Subkey classifier dispatches the audit by suffix-match:</p>
+<ul class="kv">
+  <li><code>\Run</code> / <code>\RunOnce</code> (HKLM, HKCU, WOW6432Node)</li>
+  <li><code>...\Winlogon</code></li>
+  <li><code>...\SilentProcessExit</code></li>
+</ul>
+
+<p>IFEO / COM CLSID / Office add-ins are collected but a deep audit
+for them is a clean follow-up iteration (the collector's
+<code>subkey_sample</code> field has the binary names but not the
+per-binary Debugger / MonitorProcess sub-values).</p>
+
+<h2>Detection layers (R1–R6)</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Severity</th><th>What it catches</th><th>MITRE</th></tr></thead>
+  <tbody>
+    <tr><td>R1</td><td>high</td><td>Run/RunOnce value with writable-path command. <code>%TEMP%</code>, <code>%APPDATA%\Local\Temp</code>, <code>%PUBLIC%</code>, <code>%USERPROFILE%\Downloads</code>, <code>\Windows\Temp</code>, <code>\ProgramData\Temp</code>.</td><td>T1547.001</td></tr>
+    <tr><td>R2</td><td>high</td><td>Run/RunOnce value with LOLBin proxy executor: <code>rundll32</code> / <code>mshta</code> / <code>regsvr32</code> / <code>wscript</code> / <code>cscript</code> / <code>installutil</code> / <code>msbuild</code> / <code>certutil</code> / <code>bitsadmin</code> / <code>msxsl</code>.</td><td>T1218</td></tr>
+    <tr><td>R3</td><td>high</td><td>Run/RunOnce value with encoded PowerShell — <code>-EncodedCommand</code> / <code>-enc</code>. Most common Windows-malware entry-point per ten years of MITRE-published incident reports.</td><td>T1059.001</td></tr>
+    <tr><td>R4</td><td>high</td><td>Run/RunOnce value with network-fetch (curl / wget / Invoke-WebRequest / certutil -urlcache / bitsadmin /transfer).</td><td>T1547.001</td></tr>
+    <tr><td>R5</td><td>critical</td><td>Winlogon Shell or Userinit overridden from defaults (<code>explorer.exe</code> / <code>C:\Windows\System32\userinit.exe,</code>). Textbook user-session takeover.</td><td>T1547.004</td></tr>
+    <tr><td>R6</td><td>high</td><td>SilentProcessExit has MonitorProcess subkeys — covert-IFEO ghost-process surveillance / re-spawn on EDR kill.</td><td>T1546.012</td></tr>
+  </tbody>
+</table>
+
+<h2>Operational notes</h2>
+
+<p><code>_first_token_basename()</code> handles both quoted
+(<code>"C:\X\my app.exe" --flag</code>) and unquoted
+(<code>foo.exe arg</code>) command forms, stripping <code>.exe</code>
+for clean basename match. Non-string registry values (REG_DWORD
+integers, etc.) are stringified — the detector never crashes on
+unexpected types.</p>
+
+<p>The Windows registry collector runs as part of
+<code>digger collect</code>; the detector runs at
+<code>digger scan</code> time.</p>
+
+</main>
+<script src="docs.js"></script>
+</body>
+</html>
