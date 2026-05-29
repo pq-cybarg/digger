@@ -10,7 +10,7 @@
 <main>
 
 <h1>Detectors
-  <span class="subtitle">55 detectors over a collected case, layered from behavioral heuristics to live intel matching, with auto-Sigma export per detector.</span>
+  <span class="subtitle">59 detectors over a collected case, layered from behavioral heuristics to live intel matching, with auto-Sigma export per detector.</span>
 </h1>
 
 <h2>How they fit together</h2>
@@ -250,6 +250,20 @@ only after that collector has populated the case:</p>
   <li><b><code>macos_launchd</code></b> — see <a href="macos-launchd.html">macOS launchd deep audit</a>. Network-fetch in ProgramArguments, encoded payloads, Label/filename masquerade, WatchPaths on writable dirs, interpreter+KeepAlive respawn loops, osascript runners (L1–L7, T1543.001 / T1059.004 / T1059.002 / T1027 / T1036 / T1546).</li>
   <li><b><code>vscode_audit</code></b> — see <a href="vscode.html">VS Code audit</a>. Sideloaded extensions, untrusted publishers, workspace-trust disablement, http.proxyStrictSSL=false, terminal-shell hijacks, project-scoped .vscode/settings.json with risky keys (V1–V7, T1195.002 / T1546 / T1059 / T1557 / T1505.003).</li>
   <li><b><code>browser_ext_perms</code></b> — see <a href="browser-ext-perms.html">Browser extension permission combinations</a>. nativeMessaging, webRequest+all_urls, all_urls+cookies+tabs (session theft), proxy / debugger, generic spy stack, hardware bridges, declarativeNetRequest with many host patterns (B1–B8, T1176 / T1071.001 / T1539 / T1557 / T1090 / T1056.001 / T1543).</li>
+</ul>
+
+<h3>Persistence (cross-platform)</h3>
+
+<p>Deep-audit detectors that complete the cross-platform persistence
+story (macOS launchd + TCC, Linux systemd / cron / shell rc,
+Windows registry). Each runs on the existing platform collector's
+artifacts; no new CLI commands required.</p>
+
+<ul class="kv">
+  <li><b><code>systemd_audit</code></b> — see <a href="systemd-audit.html">Linux systemd unit audit</a>. User AND system unit text inspected: network-fetch in Exec*, encoded payloads, interpreter + Restart respawn, ExecStart from writable path + auto-enabled, root + writable Exec target, writable EnvironmentFile / LoadCredential, sub-minute timers (U1–U7, T1543.002 / T1059.004 / T1053.006 / T1027 / T1546).</li>
+  <li><b><code>cron_audit</code></b> — see <a href="cron-audit.html">Cron / anacron / at deep audit</a>. /etc/crontab + /etc/cron.* + /var/spool/cron* + /var/spool/at: network-fetch, encoded payloads, command in writable path, root-context with attacker path, @reboot, at-jobs, high-frequency cadence (C1–C7, T1053.003 / T1053.001 / T1059.004 / T1027 / T1546 / T1037).</li>
+  <li><b><code>shell_profile_audit</code></b> — see <a href="shell-profile-audit.html">Shell rc / profile audit</a>. Bash / zsh / fish / nushell init files under HOME + /etc: network-fetch, encoded payloads, PATH prepend with writable head, alias hijack of sudo / ssh / git / docker, trap / PROMPT_COMMAND / precmd, source from writable, LD_PRELOAD / DYLD_INSERT_LIBRARIES export (SH1–SH7, T1546.004 / T1059.004 / T1027 / T1574.007 / T1574.006).</li>
+  <li><b><code>windows_registry_audit</code></b> — see <a href="windows-registry-audit.html">Windows registry persistence audit</a>. Run / RunOnce values with writable path, LOLBin proxy executors, encoded PowerShell, network-fetch; Winlogon Shell / Userinit hijack; SilentProcessExit MonitorProcess (R1–R6, T1547.001 / T1547.004 / T1546.012 / T1218 / T1059.001 / T1027).</li>
 </ul>
 
 <h3><code>timeline</code></h3>
