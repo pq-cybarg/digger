@@ -37,6 +37,9 @@ for arg in "$@"; do
 done
 
 PLIST_PATH="$HOME/Library/LaunchAgents/com.ghidbar.menubar.plist"
+ZSHRC="$HOME/.zshrc"
+RC_MARK_START="# >>> ghidbar-here shell function (added by tools/identity/install.sh) >>>"
+RC_MARK_END="# <<< ghidbar-here shell function <<<"
 
 if [[ "$UNINSTALL" -eq 1 ]]; then
     if [[ -f "$PLIST_PATH" ]]; then
@@ -47,6 +50,12 @@ if [[ "$UNINSTALL" -eq 1 ]]; then
     pkill -9 -f "ghidbar/ghidbar.py" 2>/dev/null || true
     rm -rf "$HOME/.local/share/ghidbar" "$HOME/.config/ghidbar"
     rm -f "$HOME/.local/bin/ghid" "$HOME/.local/bin/ghidbar"
+    # Strip the ghidbar-here block from ~/.zshrc if we ever added it.
+    if [[ -f "$ZSHRC" ]] && grep -qF "$RC_MARK_START" "$ZSHRC"; then
+        # macOS sed: -i needs an explicit backup-suffix arg (use '')
+        sed -i '' "/$RC_MARK_START/,/$RC_MARK_END/d" "$ZSHRC"
+        echo "  ✓ removed ghidbar-here block from $ZSHRC"
+    fi
     echo "  ✓ uninstalled (your ~/.ssh/config and keys are untouched)"
     exit 0
 fi
@@ -99,6 +108,48 @@ if ! echo "$PATH" | tr ':' '\n' | grep -q "^$HOME/.local/bin$"; then
     echo
     echo "  ⚠ ~/.local/bin is not on your PATH. Add to ~/.zshrc:"
     echo "      export PATH=\"\$HOME/.local/bin:\$PATH\""
+fi
+
+# ghidbar-here / gbh shell function — tells the menu-bar app which
+# repo to watch. Append idempotently:
+#   - If a `ghidbar-here()` function already exists (with or without
+#     our markers), do nothing.
+#   - Otherwise append a marked block to ~/.zshrc.
+if [[ -f "$ZSHRC" ]] && grep -qE "^ghidbar-here[[:space:]]*\(\)" "$ZSHRC"; then
+    echo "  ✓ ghidbar-here shell function already in $ZSHRC"
+else
+    [[ -f "$ZSHRC" ]] || touch "$ZSHRC"
+    cat >> "$ZSHRC" <<ZSHRC_BLOCK
+
+$RC_MARK_START
+# Tells the ghidbar menu-bar app which repo to watch. State is the
+# JSON file at ~/.config/ghidbar/state.json; the menu-bar app polls
+# it every 5 s.
+#   ghidbar-here            # use \$PWD's repo
+#   ghidbar-here /some/path # use a different repo
+ghidbar-here() {
+    local target="\${1:-\$PWD}"
+    local repo
+    repo=\$(git -C "\$target" rev-parse --show-toplevel 2>/dev/null) || {
+        echo "ghidbar-here: not in a git repo: \$target" >&2
+        return 1
+    }
+    mkdir -p "\$HOME/.config/ghidbar"
+    python3 -c "
+import json, pathlib, sys
+pathlib.Path('\$HOME/.config/ghidbar/state.json').write_text(
+    json.dumps({'repo': sys.argv[1]}, indent=2) + '\n'
+)
+" "\$repo" || {
+        echo "ghidbar-here: failed to write state file" >&2
+        return 1
+    }
+    echo "ghidbar watching: \$repo"
+}
+alias gbh='ghidbar-here'
+$RC_MARK_END
+ZSHRC_BLOCK
+    echo "  ✓ added ghidbar-here to $ZSHRC (open a new shell or run 'source ~/.zshrc')"
 fi
 
 echo
